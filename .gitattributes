@@ -1,0 +1,14 @@
+# Zeilenenden im Repository immer LF.
+#
+# Entscheidend fuer die Shell-Skripte: Ein Skript mit CRLF scheitert im
+# Linux-Container mit "/bin/sh^M: bad interpreter" - der Container startet
+# dann gar nicht erst.
+* text=auto eol=lf
+
+*.sh text eol=lf
+Dockerfile text eol=lf
+
+*.png binary
+*.jpg binary
+*.pdf binary
+*.dump binary
