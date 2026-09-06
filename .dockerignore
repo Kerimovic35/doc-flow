@@ -1,0 +1,49 @@
+# Was nicht in den Build-Kontext gehoert.
+#
+# Wichtig fuer die Geschwindigkeit (node_modules waere der groesste Posten)
+# und fuer die Sicherheit: .env enthaelt Zugangsdaten und darf niemals in ein
+# Image geraten. data/ enthaelt Originaldokumente.
+
+node_modules
+.next
+out
+build
+dist
+
+.env
+.env.local
+.env.production
+.env*.local
+
+data
+backups
+*.dump
+*.sql.gz
+
+.git
+.gitignore
+.github
+
+.claude
+.windsurf
+.agents
+skills-lock.json
+
+README.md
+CLAUDE.md
+*.md
+
+# Generierter Prisma-Client wird im Build neu erzeugt.
+src/generated
+
+# Tests laufen nicht im Container.
+**/*.test.ts
+**/*.int.test.ts
+src/test
+scripts
+vitest.config.ts
+vitest.integration.config.ts
+
+*.tsbuildinfo
+coverage
+.DS_Store

@@ -1,0 +1,35 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Umgebungsvariablen enthalten Datenbank-Zugangsdaten und Session-Secrets
+.env
+.env.local
+.env.production
+.env*.local
+
+# Generierter Prisma-Client
+src/generated/
+
+# Originaldokumente, abgeleitete Seitenbilder und Backups.
+# Enthalten Echtdaten und gehoeren niemals ins Repository.
+data/
+backups/
+*.dump
+*.sql.gz
+
+.DS_Store
+*.pem
+npm-debug.log*
+*.tsbuildinfo
+next-env.d.ts
+coverage/
+
+# Vom Prisma-CLI ungefragt angelegte Hilfsdateien fuer KI-Werkzeuge.
+# .claude/launch.json bleibt bewusst erhalten.
+.claude/skills/
+.windsurf/
+.agents/
+skills-lock.json

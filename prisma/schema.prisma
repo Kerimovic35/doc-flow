@@ -1,0 +1,776 @@
+// Doc-Flow - Datenmodell
+//
+// Leitgedanken:
+//   1. Das Original ist unantastbar. DocumentFile wird nach dem Hochladen nie
+//      wieder geschrieben; alles Abgeleitete ist neu erzeugbar.
+//   2. Jede fachliche Zeile traegt userId. Auch bei einem einzigen Benutzer -
+//      damit die Zugriffskontrolle spaeter nicht nachtraeglich eingezogen
+//      werden muss.
+//   3. Nichts wird geloescht, nur ausgeblendet (deletedAt) oder archiviert.
+//   4. Automatisch erkannte Angaben tragen immer Herkunft, Konfidenz und
+//      Beleg (Seite + Zitat). Ohne pruefbaren Beleg gilt eine Angabe als
+//      unbestaetigt.
+//   5. Geld ausschliesslich als NUMERIC (Decimal), nie als Float.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// Benutzer, Sitzungen, Einstellungen
+// ============================================================
+
+enum UserRole {
+  /// Normaler Zugang: alle fachlichen Funktionen.
+  USER
+  /// Zusaetzlich Systembereich: Backups, Wartung.
+  ADMIN
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  role         UserRole @default(USER)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  sessions      Session[]
+  settings      UserSettings?
+  persons       Person[]
+  categories    Category[]
+  tags          Tag[]
+  documents     Document[]
+  files         DocumentFile[]
+  pages         DocumentPage[]
+  identifiers   DocumentIdentifier[]
+  runs          AnalysisRun[]
+  jobs          ProcessingJob[]
+  tasks         Task[]
+  payments      Payment[]
+  reminders     Reminder[]
+  conversations AiConversation[]
+  messages      AiMessage[]
+  sources       AiSource[]
+
+  @@map("users")
+}
+
+/// Serverseitig gefuehrte Sitzungen: jederzeit einzeln widerrufbar.
+/// Gespeichert wird nur der Hash des Tokens - ein Datenbankleck gibt damit
+/// keine gueltigen Sitzungen preis.
+model Session {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  tokenHash  String   @unique @map("token_hash")
+  expiresAt  DateTime @map("expires_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  userAgent  String?  @map("user_agent")
+  ip         String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+enum AiProviderKind {
+  ANTHROPIC
+  OLLAMA
+}
+
+/// Persoenliche Voreinstellungen. Getrennt vom Systemzustand (SystemState),
+/// damit Betriebsdaten nicht in den Nutzerdaten liegen.
+///
+/// API-Schluessel stehen bewusst NICHT hier, sondern ausschliesslich in der
+/// Umgebung: Die Datenbank landet in jedem Backup.
+model UserSettings {
+  userId String @id @map("user_id")
+
+  aiEnabled         Boolean        @default(true) @map("ai_enabled")
+  aiProvider        AiProviderKind @default(ANTHROPIC) @map("ai_provider")
+  aiModel           String         @default("claude-opus-5") @map("ai_model")
+  aiEffort          String         @default("high") @map("ai_effort")
+  /// Seitenbilder zusaetzlich zum Text an die KI geben. Verbessert die
+  /// Erkennung von Briefkoepfen und Tabellen, kostet aber mehr.
+  analysisUseImages Boolean        @default(true) @map("analysis_use_images")
+  /// Seiten mit schlechter Texterkennung von einem Bildmodell nachbessern
+  /// lassen. Standardmaessig aus: Das Ergebnis ist Modellausgabe und kann
+  /// selbst Fehler enthalten.
+  visionOcrEnabled  Boolean        @default(false) @map("vision_ocr_enabled")
+  /// Unterhalb dieser Seitenkonfidenz gilt ein Dokument als pruefbeduerftig.
+  ocrThreshold      Int            @default(70) @map("ocr_threshold")
+  /// Nach der Texterkennung selbsttaetig die Analyse anstossen.
+  autoAnalyze       Boolean        @default(true) @map("auto_analyze")
+  /// Vorlauftage fuer Erinnerungen, z. B. [7, 3, 1, 0].
+  reminderDays      Json           @default("[7, 3, 1, 0]") @map("reminder_days")
+  defaultCategoryId String?        @map("default_category_id")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defaultCategory Category? @relation(fields: [defaultCategoryId], references: [id], onDelete: SetNull)
+
+  @@map("user_settings")
+}
+
+/// Betriebszustand als Schluessel-Wert-Ablage: Lebenszeichen des Workers,
+/// Stand der Startdaten, letztes Backup. Bewusst keine eigene Tabelle je
+/// Zweck - der Inhalt ist klein und wechselt.
+model SystemState {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_state")
+}
+
+// ============================================================
+// Personen, Kategorien, Schlagworte
+// ============================================================
+
+enum PersonKind {
+  /// Der Kontoinhaber selbst.
+  SELF
+  /// Angehoerige, deren Post mitverwaltet wird.
+  FAMILY
+  OTHER
+}
+
+/// Eine Person, der Dokumente zugeordnet werden - NICHT ein Login.
+/// Ein Benutzerkonto verwaltet die Post mehrerer Personen.
+model Person {
+  id        String     @id @default(cuid())
+  userId    String     @map("user_id")
+  name      String
+  kind      PersonKind @default(FAMILY)
+  birthDate DateTime?  @map("birth_date") @db.Date
+  notes     String?
+  sortOrder Int        @default(0) @map("sort_order")
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents Document[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("persons")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  name      String
+  slug      String
+  sortOrder Int      @default(0) @map("sort_order")
+  /// Mitgelieferte Kategorie. Umbenennbar, aber nicht loeschbar.
+  isSystem  Boolean  @default(false) @map("is_system")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents Document[]
+  settings  UserSettings[]
+
+  @@unique([userId, slug])
+  @@index([userId])
+  @@map("categories")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents DocumentTag[]
+
+  @@unique([userId, name])
+  @@map("tags")
+}
+
+model DocumentTag {
+  documentId String @map("document_id")
+  tagId      String @map("tag_id")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, tagId])
+  @@index([tagId])
+  @@map("document_tags")
+}
+
+// ============================================================
+// Dokumente
+// ============================================================
+
+/// Stand der Verarbeitungskette. Getrennt von ReviewState: Ein Dokument kann
+/// fertig verarbeitet sein UND trotzdem Pruefung brauchen.
+enum ProcessingStatus {
+  /// Dateien liegen, Verarbeitung noch nicht gestartet.
+  UPLOADED
+  /// Seiten werden aufbereitet (Drehung, Seitenbilder, PDF-Zerlegung).
+  PREPARING
+  OCR
+  ANALYZING
+  DONE
+  /// Ein Schritt ist endgueltig gescheitert. Die Originale sind unberuehrt,
+  /// bereits erzeugte Ergebnisse bleiben erhalten.
+  FAILED
+}
+
+/// Inhaltliche Pruefung durch den Benutzer.
+enum ReviewState {
+  NONE
+  NEEDED
+  REVIEWED
+}
+
+enum DocumentLifecycle {
+  ACTIVE
+  ARCHIVED
+  DONE
+}
+
+/// Woher der Text einer Seite stammt. Entscheidend fuer die Belegpruefung:
+/// Text aus einem Bildmodell (VISION) ist selbst Modellausgabe und wird
+/// niedriger bewertet als erkannter oder eingebetteter Text.
+enum TextSource {
+  NONE
+  PDF_TEXT
+  OCR
+  VISION
+}
+
+model Document {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+
+  // --- Verarbeitung -----------------------------------------
+  processingStatus ProcessingStatus @default(UPLOADED) @map("processing_status")
+  /// Klartext fuer die Oberflaeche, z. B. "Seite 3 von 12".
+  processingStep   String?          @map("processing_step")
+  progressDone     Int              @default(0) @map("progress_done")
+  progressTotal    Int              @default(0) @map("progress_total")
+  failedStep       JobType?         @map("failed_step")
+  /// Fehlermeldung fuer die Oberflaeche. Enthaelt niemals Dokumentinhalt.
+  lastError        String?          @map("last_error")
+
+  reviewState ReviewState       @default(NONE) @map("review_state")
+  lifecycle   DocumentLifecycle @default(ACTIVE)
+  /// Ausblenden statt loeschen. Die Anwendung ist ein Langzeitarchiv.
+  deletedAt   DateTime?         @map("deleted_at")
+
+  // --- Metadaten --------------------------------------------
+  // Typisierte Spalten, weil danach gefiltert und sortiert wird. Herkunft,
+  // Konfidenz und Beleg jedes Feldes stehen in fieldMeta.
+  title        String?
+  documentType String?   @map("document_type")
+  sender       String?
+  recipient    String?
+  subject      String?
+  summary      String?
+  documentDate DateTime? @map("document_date") @db.Date
+  receivedDate DateTime? @map("received_date") @db.Date
+
+  personId        String?  @map("person_id")
+  /// Die Zuordnung zur Person war nicht eindeutig - die Oberflaeche fragt nach.
+  personUncertain Boolean  @default(false) @map("person_uncertain")
+  categoryId      String?  @map("category_id")
+
+  /// Je Feldname: { confidence, page, quote, verification, source }.
+  /// source = 'USER' schuetzt den Wert vor jeder erneuten Analyse.
+  fieldMeta Json @default("{}") @map("field_meta")
+
+  /// Volltextindex ueber Titel, Absender, Betreff und Zusammenfassung.
+  /// Erzeugte Spalte, per Raw-SQL in der Migration angelegt.
+  searchVector Unsupported("tsvector")? @map("search_vector")
+
+  // --- Verlauf ----------------------------------------------
+  ocrAt      DateTime? @map("ocr_at")
+  analyzedAt DateTime? @map("analyzed_at")
+  pageCount  Int       @default(0) @map("page_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person        Person?              @relation(fields: [personId], references: [id], onDelete: SetNull)
+  category      Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  files         DocumentFile[]
+  pages         DocumentPage[]
+  identifiers   DocumentIdentifier[]
+  tags          DocumentTag[]
+  runs          AnalysisRun[]
+  jobs          ProcessingJob[]
+  tasks         Task[]
+  payments      Payment[]
+  conversations AiConversation[]
+  sources       AiSource[]
+
+  @@index([userId, deletedAt, lifecycle, createdAt(sort: Desc)])
+  @@index([userId, processingStatus])
+  @@index([userId, personId])
+  @@index([userId, categoryId])
+  @@index([userId, documentDate])
+  @@map("documents")
+}
+
+/// Die hochgeladene Originaldatei. Nach dem Anlegen unveraenderlich.
+/// Mehrere Dateien bilden ein Dokument (drei Fotos eines Briefes).
+model DocumentFile {
+  id           String   @id @default(cuid())
+  documentId   String   @map("document_id")
+  userId       String   @map("user_id")
+  /// Pfad in der Ablage, ausschliesslich aus serverseitigen IDs gebildet.
+  storageKey   String   @unique @map("storage_key")
+  /// Anzeigename des Benutzers. Geht niemals in einen Pfad ein.
+  originalName String   @map("original_name")
+  mimeType     String   @map("mime_type")
+  sizeBytes    Int      @map("size_bytes")
+  /// Pruefsumme: erkennt Dubletten beim Hochladen und beschaedigte Ablagen.
+  sha256       String
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  document Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pages    DocumentPage[]
+
+  @@index([documentId])
+  @@index([userId, sha256])
+  @@map("document_files")
+}
+
+/// Eine Seite des Dokuments: Bild, Text und Erkennungsguete.
+/// Die Seitenzahl ist die Klammer zwischen Beleg und Anzeige - eine
+/// KI-Aussage verweist immer auf genau eine Seite.
+model DocumentPage {
+  id         String @id @default(cuid())
+  documentId String @map("document_id")
+  userId     String @map("user_id")
+  fileId     String @map("file_id")
+  /// Fortlaufend ueber das gesamte Dokument, 1-basiert.
+  pageNumber Int    @map("page_number")
+  /// Seite innerhalb der Quelldatei (bei PDFs relevant).
+  pageInFile Int    @default(1) @map("page_in_file")
+
+  width    Int?
+  height   Int?
+  rotation Int  @default(0)
+
+  /// Abgeleitete Dateien: Anzeigebild, Vorschaubild, Vorlage fuer die
+  /// Texterkennung. Alle jederzeit neu erzeugbar.
+  imageKey    String? @map("image_key")
+  thumbKey    String? @map("thumb_key")
+  ocrInputKey String? @map("ocr_input_key")
+
+  text          String?
+  textSource    TextSource @default(NONE) @map("text_source")
+  /// Laengengewichtete mittlere Wortkonfidenz, 0-100.
+  ocrConfidence Int?       @map("ocr_confidence")
+  ocrRunId      String?    @map("ocr_run_id")
+
+  /// Volltextindex ueber den Seitentext. Erzeugte Spalte, siehe Migration.
+  searchVector Unsupported("tsvector")? @map("search_vector")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  document Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  file     DocumentFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  sources  AiSource[]
+
+  @@unique([documentId, pageNumber])
+  @@index([userId])
+  @@index([fileId])
+  @@map("document_pages")
+}
+
+/// Aktenzeichen, Kunden- und Vertragsnummern. Eigene Tabelle, weil ein
+/// Dokument mehrere fuehrt und danach exakt gesucht wird.
+model DocumentIdentifier {
+  id         String @id @default(cuid())
+  documentId String @map("document_id")
+  userId     String @map("user_id")
+  /// AKTENZEICHEN | KUNDENNUMMER | VERTRAGSNUMMER | REFERENZ | SONSTIGE
+  kind       String
+  value      String
+  /// Ohne Leer- und Trennzeichen, fuer die Suche.
+  normalized String
+
+  page         Int?
+  quote        String?
+  verification Verification @default(UNVERIFIED)
+  confidence   Int          @default(0)
+  /// AI | USER
+  source       String       @default("AI")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, kind, normalized])
+  @@index([userId, normalized])
+  @@map("document_identifiers")
+}
+
+// ============================================================
+// Verarbeitung: Laeufe und Auftraege
+// ============================================================
+
+enum RunKind {
+  INGEST
+  OCR
+  ANALYSIS
+}
+
+enum RunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+}
+
+/// Protokoll eines Verarbeitungslaufs. Beantwortet "wann wurde das zuletzt
+/// analysiert, womit, und was kam heraus" - ohne das Ergebnis selbst zu
+/// ueberschreiben.
+model AnalysisRun {
+  id         String    @id @default(cuid())
+  documentId String    @map("document_id")
+  userId     String    @map("user_id")
+  kind       RunKind
+  status     RunStatus @default(RUNNING)
+
+  provider String?
+  model    String?
+  /// Hash der Eingabe. Gleicher Hash und bereits erfolgreich = ueberspringen.
+  inputHash String? @map("input_hash")
+
+  startedAt  DateTime  @default(now()) @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+
+  inputTokens  Int? @map("input_tokens")
+  outputTokens Int? @map("output_tokens")
+  costCents    Int? @map("cost_cents")
+
+  /// Rohantwort des Modells (nur bei ANALYSIS). Bei OCR stehen hier nur
+  /// Kennzahlen - der TSV-Rohtext waere zu gross.
+  rawOutput Json?   @map("raw_output")
+  error     String?
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, kind, startedAt(sort: Desc)])
+  @@index([userId])
+  @@map("analysis_runs")
+}
+
+enum JobType {
+  INGEST
+  OCR
+  ANALYZE
+  DAILY_MAINTENANCE
+  BACKUP
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+/// Auftragswarteschlange in der Datenbank statt in Redis: ein Dienst
+/// weniger, und die Auftraege liegen im selben Backup wie die Daten.
+/// Der Worker greift sich Zeilen mit FOR UPDATE SKIP LOCKED.
+model ProcessingJob {
+  id         String    @id @default(cuid())
+  type       JobType
+  status     JobStatus @default(PENDING)
+  documentId String?   @map("document_id")
+  userId     String?   @map("user_id")
+  payload    Json      @default("{}")
+  /// Zweiter Teil des Eindeutigkeitsschluessels: verhindert, dass ein
+  /// zweiter Klick auf "Erneut versuchen" einen doppelten Auftrag anlegt.
+  dedupeKey  String    @default("") @map("dedupe_key")
+
+  runAfter    DateTime @default(now()) @map("run_after")
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(3) @map("max_attempts")
+
+  /// Pacht statt Sperre: Stuerzt der Worker mitten im Auftrag ab, holt der
+  /// naechste Lauf den Auftrag nach Ablauf zurueck.
+  lockedBy    String?   @map("locked_by")
+  lockedUntil DateTime? @map("locked_until")
+  lastError   String?   @map("last_error")
+
+  createdAt  DateTime  @default(now()) @map("created_at")
+  startedAt  DateTime? @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+
+  document Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, type, dedupeKey])
+  @@index([status, runAfter])
+  @@map("processing_jobs")
+}
+
+// ============================================================
+// Aufgaben, Zahlungen, Erinnerungen
+// ============================================================
+
+/// Ergebnis der Belegpruefung.
+enum Verification {
+  /// Zitat im Seitentext gefunden UND Wert daraus ableitbar.
+  VERIFIED
+  /// Zitat gefunden, der Wert laesst sich daraus nicht pruefen.
+  QUOTE_ONLY
+  /// Zitat nicht auffindbar. Die Angabe gilt als unbestaetigt.
+  UNVERIFIED
+  /// Vom Benutzer eingetragen oder bestaetigt.
+  USER
+}
+
+enum TaskKind {
+  /// Etwas ist zu tun.
+  TASK
+  /// Reine Frist ohne Handlung.
+  DEADLINE
+}
+
+enum TaskStatus {
+  /// Von der KI vorgeschlagen, noch nicht bestaetigt. Zaehlt nirgends mit.
+  PROPOSED
+  OPEN
+  DONE
+  POSTPONED
+  IGNORED
+}
+
+model Task {
+  id         String  @id @default(cuid())
+  userId     String  @map("user_id")
+  documentId String? @map("document_id")
+
+  kind   TaskKind   @default(TASK)
+  status TaskStatus @default(PROPOSED)
+
+  title       String
+  description String?
+  dueDate     DateTime? @map("due_date") @db.Date
+  /// Frist aus einer relativen Angabe berechnet - der Benutzer sollte sie
+  /// pruefen.
+  dueUncertain Boolean  @default(false) @map("due_uncertain")
+  /// Klartext der Herleitung, z. B. "innerhalb von 2 Wochen ab 12.03.2026".
+  dueRule      String?  @map("due_rule")
+
+  page         Int?
+  quote        String?
+  verification Verification @default(UNVERIFIED)
+  confidence   Int?
+  /// AI | USER
+  source       String       @default("AI")
+  analysisRunId String?     @map("analysis_run_id")
+  /// Erkennt denselben Vorschlag bei einer erneuten Analyse wieder.
+  dedupeKey     String?     @map("dedupe_key")
+
+  postponedTo DateTime? @map("postponed_to") @db.Date
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document  Document?  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  reminders Reminder[]
+
+  @@index([userId, status, dueDate])
+  @@index([documentId])
+  @@map("tasks")
+}
+
+enum PaymentDirection {
+  /// Der Benutzer muss zahlen.
+  OUTGOING
+  /// Der Benutzer bekommt Geld.
+  INCOMING
+}
+
+enum PaymentStatus {
+  PROPOSED
+  OPEN
+  PAID
+  IGNORED
+}
+
+model Payment {
+  id         String  @id @default(cuid())
+  userId     String  @map("user_id")
+  documentId String? @map("document_id")
+
+  status    PaymentStatus    @default(PROPOSED)
+  direction PaymentDirection @default(OUTGOING)
+  amount    Decimal          @db.Decimal(12, 2)
+  currency  String           @default("EUR")
+
+  dueDate      DateTime? @map("due_date") @db.Date
+  dueUncertain Boolean   @default(false) @map("due_uncertain")
+  dueRule      String?   @map("due_rule")
+
+  purpose   String?
+  iban      String?
+  recipient String?
+
+  page         Int?
+  quote        String?
+  verification Verification @default(UNVERIFIED)
+  confidence   Int?
+  source       String       @default("AI")
+  analysisRunId String?     @map("analysis_run_id")
+  dedupeKey     String?     @map("dedupe_key")
+
+  paidAt    DateTime? @map("paid_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document  Document?  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  reminders Reminder[]
+
+  @@index([userId, status, dueDate])
+  @@index([documentId])
+  @@map("payments")
+}
+
+/// Ein Erinnerungszeitpunkt zu einer Aufgabe oder Zahlung. Wird beim Lesen
+/// des Dashboards nachgezogen, nicht von einem Zeitgeber erzeugt - bei einem
+/// Benutzer ist das einfacher und genauso zuverlaessig.
+model Reminder {
+  id        String @id @default(cuid())
+  userId    String @map("user_id")
+  taskId    String? @map("task_id")
+  paymentId String? @map("payment_id")
+
+  daysBefore Int      @map("days_before")
+  remindAt   DateTime @map("remind_at")
+  seenAt     DateTime? @map("seen_at")
+  /// Fuer spaetere Zustellwege (E-Mail, Push).
+  sentAt     DateTime? @map("sent_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task    Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, daysBefore])
+  @@unique([paymentId, daysBefore])
+  @@index([userId, remindAt])
+  @@map("reminders")
+}
+
+// ============================================================
+// KI-Gespraeche
+// ============================================================
+
+enum ConversationScope {
+  /// Assistent ueber den gesamten Bestand.
+  GLOBAL
+  /// Chat zu genau einem Dokument.
+  DOCUMENT
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+model AiConversation {
+  id         String            @id @default(cuid())
+  userId     String            @map("user_id")
+  scope      ConversationScope @default(GLOBAL)
+  documentId String?           @map("document_id")
+  title      String?
+  createdAt  DateTime          @default(now()) @map("created_at")
+  updatedAt  DateTime          @updatedAt @map("updated_at")
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document Document?   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  messages AiMessage[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@index([documentId])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String      @id @default(cuid())
+  conversationId String      @map("conversation_id")
+  userId         String      @map("user_id")
+  role           MessageRole
+  content        String
+
+  /// Geprueftes Antwortgeruest: { facts, interpretation, notFound }.
+  /// Nur belegte Aussagen sind hier enthalten.
+  structured Json?
+
+  provider     String?
+  model        String?
+  inputTokens  Int? @map("input_tokens")
+  outputTokens Int? @map("output_tokens")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources      AiSource[]
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
+}
+
+/// Der Beleg zu einer einzelnen Aussage. Ohne Eintrag hier darf keine
+/// dokumentenbasierte Behauptung stehen bleiben.
+model AiSource {
+  id         String @id @default(cuid())
+  messageId  String @map("message_id")
+  userId     String @map("user_id")
+  documentId String @map("document_id")
+  pageId     String? @map("page_id")
+  page       Int
+  quote      String
+  verification Verification @default(VERIFIED)
+  /// Stellung in der Fakenliste der Antwort, fuer die Fussnoten.
+  claimIndex Int    @map("claim_index")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message  AiMessage     @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document Document      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  pageRef  DocumentPage? @relation(fields: [pageId], references: [id], onDelete: SetNull)
+
+  @@index([messageId])
+  @@index([documentId])
+  @@map("ai_sources")
+}

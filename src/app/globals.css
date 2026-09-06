@@ -1,0 +1,113 @@
+@import 'tailwindcss';
+
+/*
+ * Farbtokens als CSS-Variablen, damit Hell- und Dunkelmodus dieselben
+ * Utility-Klassen verwenden. `@theme inline` laesst Tailwind die Variablen
+ * referenzieren statt ihre Werte einzusetzen.
+ */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warning: var(--warning);
+}
+
+:root {
+  --canvas: #f6f7f9;
+  --surface: #ffffff;
+  --surface-muted: #f1f3f6;
+  --border: #e2e6ec;
+  --text: #10141a;
+  --text-muted: #62707f;
+  --accent: #1f5fd6;
+  --accent-fg: #ffffff;
+  --positive: #1a7f4b;
+  --negative: #c0392b;
+  --warning: #b06a00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #0c1015;
+    --surface: #161c24;
+    --surface-muted: #1e2630;
+    --border: #2a3441;
+    --text: #eef2f6;
+    --text-muted: #94a3b4;
+    --accent: #4d8dfa;
+    --accent-fg: #0c1015;
+    --positive: #3ec07c;
+    --negative: #f0705f;
+    --warning: #e0a24a;
+  }
+}
+
+html {
+  /* Verhindert, dass iOS im Querformat die Schrift eigenmaechtig vergroessert. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--canvas);
+  color: var(--text);
+  /*
+   * Systemschriften statt Webfont: auf dem iPhone wirkt die App dadurch nativ,
+   * und es entfaellt eine Ladezeit, die gerade im Mobilfunknetz spuerbar waere.
+   */
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* Unterbindet das Gummiband-Scrollen der Seite hinter fixierten Leisten. */
+  overscroll-behavior-y: none;
+}
+
+/*
+ * Mindestens 16px in allen Eingabefeldern. Safari zoomt sonst beim Fokus
+ * automatisch hinein und die Seite bleibt danach verschoben zurueck.
+ */
+input,
+select,
+textarea,
+button {
+  font-size: max(16px, 1rem);
+  font-family: inherit;
+}
+
+/*
+ * Ziffern mit fester Breite. In einer Anwendung, in der Kennzahlen
+ * untereinander stehen, verhindert das ein Zappeln der Spalten.
+ */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* Abstand zur Home-Indicator-Zone des iPhones. */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Unterdrueckt das graue Aufblitzen beim Antippen unter iOS. */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

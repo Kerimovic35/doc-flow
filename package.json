@@ -1,0 +1,65 @@
+{
+  "name": "doc-flow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "worker": "tsx watch src/worker/main.ts",
+    "build": "next build",
+    "postinstall": "prisma generate",
+    "start": "next start",
+    "lint": "eslint",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:int": "vitest run --config vitest.integration.config.ts",
+    "test:all": "vitest run && vitest run --config vitest.integration.config.ts",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:generate": "prisma generate",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.75.0",
+    "@napi-rs/canvas": "^0.1.83",
+    "@node-rs/argon2": "^2.1.0",
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "decimal.js": "^10.6.0",
+    "next": "^16.3.1",
+    "pdfjs-dist": "^5.4.149",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "sharp": "^0.34.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "dotenv": "^17.4.2",
+    "eslint": "^9.28.0",
+    "eslint-config-next": "^16.3.1",
+    "prettier": "^3.5.3",
+    "prisma": "^7.9.1",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.10"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.10.0": true,
+    "esbuild@0.28.2": true,
+    "sharp@0.35.4": true,
+    "sharp@0.34.5": true,
+    "prisma@7.10.0": true,
+    "unrs-resolver@1.12.2": true
+  }
+}
