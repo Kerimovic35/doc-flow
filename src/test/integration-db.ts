@@ -1,5 +1,5 @@
-import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@/generated/prisma/client';
+import type { PrismaClient } from '@/generated/prisma/client';
+import { createPrismaClient } from '@/server/db';
 import { ensureUserDefaults } from '@/server/services/defaults';
 
 /**
@@ -21,11 +21,9 @@ if (!/docflow_test/.test(TEST_DATABASE_URL)) {
   throw new Error(`Testdatenbank muss "docflow_test" heissen, ist aber: ${TEST_DATABASE_URL}`);
 }
 
-export const testDb = new PrismaClient({
-  // Sitzungszeitzone wie in der Anwendung fest auf UTC - sonst pruefte der
-  // Test etwas anderes, als spaeter laeuft (siehe src/server/db.ts).
-  adapter: new PrismaPg({ connectionString: TEST_DATABASE_URL, options: '-c timezone=UTC' }),
-});
+// Ueber dieselbe Fabrik wie die Anwendung - sonst pruefte der Test etwas
+// anderes, als spaeter laeuft.
+export const testDb: PrismaClient = createPrismaClient(TEST_DATABASE_URL);
 
 /**
  * Leert alle fachlichen Tabellen.

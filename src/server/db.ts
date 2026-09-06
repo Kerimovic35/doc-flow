@@ -10,6 +10,22 @@ import { PrismaClient } from '@/generated/prisma/client';
  */
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
+/**
+ * Erzeugt einen Datenbank-Client mit den verbindlichen Einstellungen.
+ *
+ * Ausdruecklich exportiert, damit Skripte, Seed und Tests denselben Weg
+ * nehmen. Ein von Hand zusammengebauter Client vergisst sonst die
+ * Zeitzone - und dann liegen seine Zeitstempel um den Zeitzonenversatz
+ * daneben, ohne dass irgendwo ein Fehler auftaucht.
+ */
+export function createPrismaClient(connectionString: string): PrismaClient {
+  return new PrismaClient({
+    // Sitzungszeitzone fest auf UTC: siehe Erklaerung in createClient().
+    adapter: new PrismaPg({ connectionString, options: '-c timezone=UTC' }),
+    log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+  });
+}
+
 function createClient(): PrismaClient {
   const url = process.env.DATABASE_URL;
   if (!url) {
@@ -30,12 +46,7 @@ function createClient(): PrismaClient {
   // auseinander. Ueber Prisma allein faellt das nie auf, weil sich der
   // Versatz beim Zurueckelesen aufhebt; in jeder Rohabfrage dagegen schon.
   // Mit UTC ist der Versatz null, und beide Wege stimmen ueberein.
-  const adapter = new PrismaPg({ connectionString: url, options: '-c timezone=UTC' });
-
-  return new PrismaClient({
-    adapter,
-    log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
-  });
+  return createPrismaClient(url);
 }
 
 export const db: PrismaClient = globalForPrisma.prisma ?? createClient();

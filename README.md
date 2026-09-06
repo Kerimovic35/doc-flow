@@ -83,7 +83,7 @@ Die Testdatenbank braucht dieselben Migrationen:
 DATABASE_URL="$TEST_DATABASE_URL" npx prisma migrate deploy
 ```
 
-### 5. Texterkennung (ab Ausbaustufe 5)
+### 5. Texterkennung
 
 Windows:
 
@@ -91,10 +91,28 @@ Windows:
 winget install UB-Mannheim.TesseractOCR
 ```
 
-Danach `TESSERACT_PATH` in der `.env` auf `tesseract.exe` zeigen lassen. Im Container ist
-Tesseract samt deutschem Sprachmodell bereits enthalten.
+Der Installer bringt nur Englisch mit. Das deutsche Sprachmodell fehlt, und in
+`C:\Program Files` lässt sich ohne Administratorrechte nichts nachlegen. Deshalb ein
+eigenes Verzeichnis:
 
-### 6. Starten
+1. `eng.traineddata`, `osd.traineddata` sowie die Ordner `configs` und `tessconfigs` aus
+   `C:/Program Files/Tesseract-OCR/tessdata` nach `data/tessdata` kopieren.
+2. `deu.traineddata` aus [tessdata_best](https://github.com/tesseract-ocr/tessdata_best)
+   dort ablegen.
+3. In der `.env` `TESSERACT_PATH` und `TESSDATA_PREFIX` setzen.
+
+Der Ordner `configs` wird gebraucht, weil Tesseract seine Ausgabeformate von dort liest.
+Fehlt er, liefert die Erkennung stillschweigend reinen Text ohne Erkennungssicherheit.
+
+Im Container ist all das bereits enthalten.
+
+### 6. KI
+
+Für Analyse und Assistent einen Schlüssel unter `ANTHROPIC_API_KEY` hinterlegen. Ohne
+Schlüssel läuft die Anwendung weiter: Dokumente werden erfasst, der Text erkannt und
+durchsucht — nur die Analyse und der Assistent stehen nicht bereit.
+
+### 7. Starten
 
 ```bash
 npm run dev
@@ -216,9 +234,41 @@ age -d -i schluessel.txt datei.dump.age > datei.dump
 - Dateien werden ausschließlich nach Anmeldung ausgeliefert; Speicherpfade bestehen nur
   aus serverseitigen IDs
 - Zugriffe auf fremde Daten scheitern mit 404 statt 403 — ein 403 verriete, dass es das
-  Objekt gibt
+  Objekt gibt. Die Detailseite antwortet aus technischen Gründen mit 200 (sie streamt und
+  hat den Status schon gesendet), zeigt aber dieselbe Nicht-gefunden-Seite wie für ein
+  nicht existierendes Dokument
+- Die Datenbanksitzung läuft fest auf UTC. Jeder eigene Prisma-Client muss über
+  `createPrismaClient` entstehen, sonst liegen seine Zeitstempel um den Zeitzonenversatz
+  daneben
 - API-Schlüssel stehen nur in der Umgebung, nie in der Datenbank
 - Im Protokoll stehen Ereignisse und IDs, niemals Dokumentinhalte
+
+## Was die KI darf und was nicht
+
+Die Anwendung steht und fällt damit, dass man ihren Angaben trauen kann. Deshalb prüft
+der Server jede Aussage der KI gegen den erkannten Text zurück, bevor sie irgendwo
+erscheint.
+
+**Bei der Analyse eines Dokuments** trägt jede erkannte Angabe eine Seitenzahl und ein
+wörtliches Zitat. Der Server sucht das Zitat im Text dieser Seite — Erkennungsfehler und
+Silbentrennungen verzeiht er, einen erfundenen Satz findet er nicht. Danach wird der Wert
+selbst geprüft: Datum, Betrag und IBAN müssen sich aus der Fundstelle ergeben, der Betrag
+auf den Cent, die IBAN gegen ihre Prüfsumme. Was die Prüfung nicht besteht, wird auf
+höchstens 30 Prozent Sicherheit gedeckelt, als unbestätigt gekennzeichnet und legt das
+Dokument zur Prüfung vor.
+
+**Beim Assistenten** gilt eine strengere Regel: Ein Beleg zählt nur, wenn er auf eine
+Seite zeigt, die das Modell in genau diesem Gespräch über ein Werkzeug angefordert hat.
+Was es nicht gelesen hat, kann es nicht belegen — auch nicht aus einem Suchergebnis
+heraus. Bleibt nach der Prüfung kein Beleg übrig, wird die Antwort ersetzt durch „In
+deinen Dokumenten habe ich dazu nichts gefunden."
+
+**Aufgaben und Zahlungen aus einer Analyse sind Vorschläge.** Sie erscheinen mit ihrer
+Fundstelle und zählen in keiner Übersicht mit, bis sie bestätigt wurden.
+
+**Relative Fristen rechnet die Anwendung, nicht das Modell.** Aus „innerhalb von zwei
+Wochen" wird ein Datum, das seine Herleitung sichtbar mitträgt und als unsicher
+gekennzeichnet ist — der Bezugspunkt ist eine Annahme.
 
 ## Grundregeln der Datenhaltung
 

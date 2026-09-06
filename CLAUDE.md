@@ -17,6 +17,11 @@ Mobile-first (iPhone), Oberfläche und Code-Kommentare durchgängig deutsch. Dep
 Vollständige Planung (Datenmodell, Pipeline, Phasen) siehe [PLAN.md](PLAN.md).
 Einrichtung und Betrieb stehen im [README](README.md).
 
+**Stand.** Erfassen, Seitenaufbereitung, Texterkennung, KI-Analyse mit Belegprüfung,
+Aufgaben und Zahlungen, Volltextsuche, KI-Assistent, Startbildschirm und Erinnerungen
+sind gebaut und getestet. Offen: der erste Lauf mit echtem Anthropic-Schlüssel und das
+erste Deployment über Coolify.
+
 ## Befehle
 
 | Befehl | Zweck |
@@ -143,6 +148,13 @@ Diese Regeln tragen die Glaubwürdigkeit der gesamten Anwendung.
   `deploy`.
 - **Dateiuploads laufen über Route Handler**, nicht über Server Actions: nur so gibt es
   eine Fortschrittsanzeige, und mehrere Fotos sprengen sonst das Body-Limit.
+- **Jeder eigene Prisma-Client entsteht über `createPrismaClient`** (`src/server/db.ts`).
+  Ein von Hand zusammengebauter Client vergisst die Zeitzone, und dann liegen seine
+  Zeitstempel um den Zeitzonenversatz daneben — lautlos.
+- **`notFound()` liefert auf geschützten Seiten den Status 200**, weil die Hülle eine
+  Ladeansicht hat und Next deshalb sofort streamt. Der Inhalt ist trotzdem die
+  Nicht-gefunden-Seite; geprüft wird die Eigenschaft, nicht der Status
+  (`scripts/e2e-upload.ts`).
 
 ---
 

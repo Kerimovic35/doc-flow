@@ -9,12 +9,9 @@
  */
 import 'dotenv/config';
 import sharp from 'sharp';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '../src/generated/prisma/client';
+import { createPrismaClient } from '../src/server/db';
 
-const db = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL!, options: '-c timezone=UTC' }),
-});
+const db = createPrismaClient(process.env.DATABASE_URL!);
 
 const PAGES = [
   [

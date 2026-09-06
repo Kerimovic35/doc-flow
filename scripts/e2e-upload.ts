@@ -11,13 +11,10 @@
 import 'dotenv/config';
 import { createHash, randomBytes } from 'node:crypto';
 import sharp from 'sharp';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '../src/generated/prisma/client';
+import { createPrismaClient } from '../src/server/db';
 
 const BASE = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3000';
-const db = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
-});
+const db = createPrismaClient(process.env.DATABASE_URL!);
 
 function hashToken(token: string): string {
   return createHash('sha256').update(`${token}.${process.env.SESSION_SECRET}`).digest('hex');
@@ -123,6 +120,67 @@ async function main() {
   const ohneSitzung = await fetch(`${BASE}/api/dokumente/${documentId}/datei/${file.id}`);
   console.log(`Ohne Anmeldung: ${ohneSitzung.status} (erwartet 404)`);
   if (ohneSitzung.status !== 404) throw new Error('Datei war ohne Anmeldung erreichbar!');
+
+  // Ein zweites Konto: Das ist der Fall, der zaehlt, sobald die Anwendung
+  // einmal fuer mehrere Benutzer geoeffnet wird.
+  const fremd = await db.user.upsert({
+    where: { email: 'zugriffsprobe@docflow.local' },
+    create: {
+      email: 'zugriffsprobe@docflow.local',
+      name: 'Zugriffsprobe',
+      passwordHash: 'nicht-verwendet',
+      role: 'USER',
+    },
+    update: {},
+    select: { id: true },
+  });
+
+  const fremdToken = randomBytes(32).toString('base64url');
+  await db.session.create({
+    data: {
+      userId: fremd.id,
+      tokenHash: hashToken(fremdToken),
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    },
+  });
+
+  const fremdHeaders = { ...headers, cookie: `docflow_session=${fremdToken}` };
+
+  const geprueft: Array<[string, string]> = [
+    ['Originaldatei', `${BASE}/api/dokumente/${documentId}/datei/${file.id}`],
+    ['Seitenbild', `${BASE}/api/dokumente/${documentId}/seite/${pages[0]!.id}`],
+    ['Status', `${BASE}/api/dokumente/${documentId}/status`],
+  ];
+
+  for (const [name, url] of geprueft) {
+    const response = await fetch(url, { headers: fremdHeaders, redirect: 'manual' });
+    console.log(`Fremdes Konto, ${name}: ${response.status} (erwartet 404)`);
+    if (response.status !== 404) throw new Error(`${name} war aus einem fremden Konto erreichbar!`);
+  }
+
+  // Die Detailseite antwortet mit 200, nicht mit 404 - und das ist kein
+  // Versehen: Die Huelle der geschuetzten Seiten hat eine Ladeansicht,
+  // Next beginnt deshalb sofort zu streamen und hat den Status schon
+  // gesendet, wenn notFound() greift. Entscheidend ist, was in der Antwort
+  // steht: die Nicht-gefunden-Seite, kein Dokumentinhalt. Genau das wird
+  // hier geprueft.
+  const detail = await fetch(`${BASE}/dokumente/${documentId}`, {
+    headers: fremdHeaders,
+    redirect: 'manual',
+  });
+  const koerper = await detail.text();
+  const zeigtInhalt = koerper.includes('seite1.jpg') || koerper.includes('Original öffnen');
+  const zeigtNichtGefunden = /Nicht gefunden/i.test(koerper);
+
+  console.log(
+    `Fremdes Konto, Detailseite: ${detail.status}, Inhalt sichtbar: ${zeigtInhalt}, Nicht-gefunden-Seite: ${zeigtNichtGefunden}`,
+  );
+  if (zeigtInhalt || !zeigtNichtGefunden) {
+    throw new Error('Die Detailseite gab einem fremden Konto Inhalte preis!');
+  }
+
+  await db.session.deleteMany({ where: { userId: fremd.id } });
+  await db.user.delete({ where: { id: fremd.id } });
 
   const fremdeHerkunft = await fetch(`${BASE}/api/dokumente/upload`, {
     method: 'POST',

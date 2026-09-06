@@ -7,9 +7,8 @@
  * durchlaufen haben.
  */
 import 'dotenv/config';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '../src/generated/prisma/client';
 import { hashPassword } from '../src/server/auth/password';
+import { createPrismaClient } from '../src/server/db';
 import { ensureUserDefaults } from '../src/server/services/defaults';
 
 const connectionString = process.env.DATABASE_URL;
@@ -17,7 +16,7 @@ if (!connectionString) {
   throw new Error('DATABASE_URL ist nicht gesetzt.');
 }
 
-const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+const db = createPrismaClient(connectionString);
 
 const EMAIL = process.env.SEED_EMAIL ?? 'masterk1057@gmail.com';
 const NAME = process.env.SEED_NAME ?? 'Kerim';
