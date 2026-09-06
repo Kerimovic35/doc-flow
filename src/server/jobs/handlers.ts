@@ -1,4 +1,5 @@
 import type { JobType } from '@/generated/prisma/enums';
+import { runIngest } from '@/server/pipeline/ingest';
 import { runDailyMaintenance } from '@/server/pipeline/maintenance';
 import { recordBackupRun, runScheduledBackup } from '@/server/services/backup';
 import type { JobHandler } from './types';
@@ -11,6 +12,11 @@ import type { JobHandler } from './types';
  * den folgenden Ausbaustufen dazu.
  */
 export const HANDLERS: Partial<Record<JobType, JobHandler>> = {
+  INGEST: async (job) => {
+    if (!job.documentId) throw new Error('INGEST ohne Dokument');
+    await runIngest(job.documentId);
+  },
+
   DAILY_MAINTENANCE: async () => {
     await runDailyMaintenance();
   },

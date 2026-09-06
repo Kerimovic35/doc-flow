@@ -102,6 +102,24 @@ async function runJob(job: ClaimedJob, handlers: HandlerMap): Promise<void> {
     const message = errorMessage(error);
     const outcome = await failJob(job.id, message, { permanent }).catch(() => null);
 
+    // Aufgegeben: Das Dokument traegt den Fehler, damit die Oberflaeche ihn
+    // zeigen und einen erneuten Versuch anbieten kann. Die Originale und
+    // alles bereits Erkannte bleiben erhalten.
+    if (outcome && !outcome.willRetry && job.documentId) {
+      await db.document
+        .update({
+          where: { id: job.documentId },
+          data: {
+            processingStatus: 'FAILED',
+            failedStep: job.type,
+            // Die Meldung stammt aus dem eigenen Code, nie aus dem Dokument.
+            lastError: message.slice(0, 500),
+            processingStep: null,
+          },
+        })
+        .catch(() => undefined);
+    }
+
     log.error('job.failed', {
       jobId: job.id,
       type: job.type,
