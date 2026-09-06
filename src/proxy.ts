@@ -16,7 +16,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  * Style-Attribute direkt am Element. Inline-Styles sind als Angriffsweg
  * deutlich weniger gefaehrlich als Skripte.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const isDev = process.env.NODE_ENV === 'development';
 

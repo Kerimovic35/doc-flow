@@ -1,3 +1,6 @@
+// Laedt .env, damit TEST_DATABASE_URL nicht bei jedem Aufruf von Hand
+// mitgegeben werden muss. Vitest liest .env von sich aus nicht.
+import 'dotenv/config';
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
 
