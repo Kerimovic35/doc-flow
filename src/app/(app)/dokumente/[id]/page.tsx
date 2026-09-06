@@ -7,6 +7,9 @@ import { requireUser } from '@/server/auth/context';
 import { listCategories } from '@/server/services/categories';
 import { getDocument } from '@/server/services/documents';
 import { listPersons } from '@/server/services/persons';
+import { PaymentCard, TaskCard } from '@/components/documents/proposal-card';
+import { listPayments } from '@/server/services/payments';
+import { listTasks } from '@/server/services/tasks';
 import { DocumentTabs, PageViewer, ProcessingBanner } from './document-view';
 import { MetaForm } from './meta-form';
 import { deleteDocumentAction, reprocessAction, setLifecycleAction } from './actions';
@@ -20,7 +23,13 @@ export default async function DocumentPage({ params }: { params: Promise<{ id: s
   const document = await getDocument(actor, id);
   if (!document) notFound();
 
-  const [persons, categories] = await Promise.all([listPersons(actor), listCategories(actor)]);
+  const [persons, categories, tasks, payments, identifiers] = await Promise.all([
+    listPersons(actor),
+    listCategories(actor),
+    listTasks(actor, { documentId: id, status: ['PROPOSED', 'OPEN', 'POSTPONED'] }),
+    listPayments(actor, { documentId: id, status: ['PROPOSED', 'OPEN'] }),
+    listIdentifiers(actor, id),
+  ]);
   const meta = readFieldMeta(document.fieldMeta);
 
   const title = document.title ?? document.sender ?? 'Ohne Titel';
@@ -61,6 +70,44 @@ export default async function DocumentPage({ params }: { params: Promise<{ id: s
                 Zusammenfassung der KI
               </h2>
               <p className="text-sm leading-relaxed">{document.summary}</p>
+              <p className="text-text-muted text-xs">
+                Zusammengefasst, nicht zitiert. Was im Dokument steht, findest du unter &bdquo;Text&ldquo;.
+              </p>
+            </section>
+          )}
+
+          {(payments.length > 0 || tasks.length > 0) && (
+            <section className="flex flex-col gap-2">
+              <h2 className="text-text-muted text-xs font-semibold tracking-wider uppercase">
+                Handlungsbedarf
+              </h2>
+              <ul className="flex flex-col gap-2">
+                {payments.map((payment) => (
+                  <PaymentCard key={payment.id} payment={payment} showDocument={false} />
+                ))}
+                {tasks.map((task) => (
+                  <TaskCard key={task.id} task={task} showDocument={false} />
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {identifiers.length > 0 && (
+            <section className="flex flex-col gap-2">
+              <h2 className="text-text-muted text-xs font-semibold tracking-wider uppercase">
+                Nummern
+              </h2>
+              <dl className="border-border bg-surface divide-border divide-y overflow-hidden rounded-2xl border">
+                {identifiers.map((identifier) => (
+                  <div
+                    key={identifier.id}
+                    className="flex items-center justify-between gap-4 px-4 py-2.5"
+                  >
+                    <dt className="text-text-muted text-sm">{identifierLabel(identifier.kind)}</dt>
+                    <dd className="tabular text-sm font-medium">{identifier.value}</dd>
+                  </div>
+                ))}
+              </dl>
             </section>
           )}
 
@@ -214,6 +261,28 @@ export default async function DocumentPage({ params }: { params: Promise<{ id: s
       </PageBody>
     </>
   );
+}
+
+/** Die im Dokument gefundenen Nummern - nur belegte kommen hier an. */
+async function listIdentifiers(actor: { id: string }, documentId: string) {
+  const { db } = await import('@/server/db');
+  return db.documentIdentifier.findMany({
+    where: { documentId, userId: actor.id },
+    orderBy: { kind: 'asc' },
+    select: { id: true, kind: true, value: true },
+  });
+}
+
+const IDENTIFIER_LABELS: Record<string, string> = {
+  AKTENZEICHEN: 'Aktenzeichen',
+  KUNDENNUMMER: 'Kundennummer',
+  VERTRAGSNUMMER: 'Vertragsnummer',
+  REFERENZ: 'Referenz',
+  SONSTIGE: 'Nummer',
+};
+
+function identifierLabel(kind: string): string {
+  return IDENTIFIER_LABELS[kind] ?? kind;
 }
 
 function asDay(value: Date | null): string {

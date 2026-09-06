@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { actorFor, resetTestDb, seedBasics, testDb } from '@/test/integration-db';
+import { resetTestDb, seedBasics, testDb } from '@/test/integration-db';
 import { emptyAnalysis, FakeAiProvider } from '@/test/fake-ai';
 import type { AnalysisOutput } from '@/lib/ai/analysis-schema';
 
