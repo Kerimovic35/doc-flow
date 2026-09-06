@@ -1,4 +1,5 @@
 import type { JobType } from '@/generated/prisma/enums';
+import { runAnalyze } from '@/server/pipeline/analyze';
 import { runIngest } from '@/server/pipeline/ingest';
 import { runDailyMaintenance } from '@/server/pipeline/maintenance';
 import { runOcr } from '@/server/pipeline/ocr';
@@ -21,6 +22,12 @@ export const HANDLERS: Partial<Record<JobType, JobHandler>> = {
   OCR: async (job) => {
     if (!job.documentId) throw new Error('OCR ohne Dokument');
     await runOcr(job.documentId);
+  },
+
+  ANALYZE: async (job) => {
+    if (!job.documentId) throw new Error('ANALYZE ohne Dokument');
+    const reason = job.payload.reason === 'reanalyze' ? 'reanalyze' : 'initial';
+    await runAnalyze(job.documentId, { reason });
   },
 
   DAILY_MAINTENANCE: async () => {
