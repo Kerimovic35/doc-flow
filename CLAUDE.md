@@ -127,6 +127,20 @@ Diese Regeln tragen die Glaubwürdigkeit der gesamten Anwendung.
   setzen.
 - **Typprüfung und Tests fangen Bundling-Fehler nicht ab.** Geänderte Seiten zusätzlich
   im Browser aufrufen.
+- **Die Datenbanksitzung läuft fest auf UTC** (`options: '-c timezone=UTC'` in
+  `src/server/db.ts`). Ohne das behandelt der Treiber Zeitstempel als Ortszeit: Von
+  Prisma geschriebene Werte und `NOW()` liegen dann um den Zeitzonenversatz
+  auseinander. Über Prisma allein fällt das nie auf, weil sich der Versatz beim
+  Zurücklesen aufhebt — in jeder Rohabfrage aber schon, und dort lautlos. Genau daran
+  stand die Auftragswarteschlange einmal still, ohne eine Zeile im Protokoll.
+- **Zeitstempel sind `@db.Timestamptz(3)`**, Kalenderdaten (`documentDate`, `dueDate`)
+  bleiben `@db.Date`. Neue `DateTime`-Felder brauchen die Angabe ausdrücklich.
+- **Rohe SQL-Indizes gehören ins Schema**, nicht nur in eine Migration: Sonst schlägt
+  die nächste Migration vor, sie zu löschen. GIN-Indizes lassen sich als
+  `@@index([feld(ops: raw("gin_trgm_ops"))], type: Gin)` deklarieren.
+- **`prisma migrate dev` wartet auf eine Eingabe** und blockiert damit ein Skript. Für
+  nicht-interaktive Läufe `migrate deploy` verwenden oder `--create-only` und danach
+  `deploy`.
 - **Dateiuploads laufen über Route Handler**, nicht über Server Actions: nur so gibt es
   eine Fortschrittsanzeige, und mehrere Fotos sprengen sonst das Body-Limit.
 

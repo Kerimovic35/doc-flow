@@ -39,8 +39,8 @@ model User {
   passwordHash String   @map("password_hash")
   role         UserRole @default(USER)
   active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   sessions      Session[]
   settings      UserSettings?
@@ -70,11 +70,11 @@ model Session {
   id         String   @id @default(cuid())
   userId     String   @map("user_id")
   tokenHash  String   @unique @map("token_hash")
-  expiresAt  DateTime @map("expires_at")
-  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(3)
   userAgent  String?  @map("user_agent")
   ip         String?
-  createdAt  DateTime @default(now()) @map("created_at")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -115,7 +115,7 @@ model UserSettings {
   reminderDays      Json           @default("[7, 3, 1, 0]") @map("reminder_days")
   defaultCategoryId String?        @map("default_category_id")
 
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   defaultCategory Category? @relation(fields: [defaultCategoryId], references: [id], onDelete: SetNull)
@@ -129,7 +129,7 @@ model UserSettings {
 model SystemState {
   key       String   @id
   value     Json
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("system_state")
 }
@@ -157,8 +157,8 @@ model Person {
   notes     String?
   sortOrder Int        @default(0) @map("sort_order")
   active    Boolean    @default(true)
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents Document[]
@@ -177,8 +177,8 @@ model Category {
   /// Mitgelieferte Kategorie. Umbenennbar, aber nicht loeschbar.
   isSystem  Boolean  @default(false) @map("is_system")
   active    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents Document[]
@@ -193,7 +193,7 @@ model Tag {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
   name      String
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents DocumentTag[]
@@ -273,7 +273,7 @@ model Document {
   reviewState ReviewState       @default(NONE) @map("review_state")
   lifecycle   DocumentLifecycle @default(ACTIVE)
   /// Ausblenden statt loeschen. Die Anwendung ist ein Langzeitarchiv.
-  deletedAt   DateTime?         @map("deleted_at")
+  deletedAt   DateTime?         @map("deleted_at") @db.Timestamptz(3)
 
   // --- Metadaten --------------------------------------------
   // Typisierte Spalten, weil danach gefiltert und sortiert wird. Herkunft,
@@ -287,10 +287,10 @@ model Document {
   documentDate DateTime? @map("document_date") @db.Date
   receivedDate DateTime? @map("received_date") @db.Date
 
-  personId        String?  @map("person_id")
+  personId        String? @map("person_id")
   /// Die Zuordnung zur Person war nicht eindeutig - die Oberflaeche fragt nach.
-  personUncertain Boolean  @default(false) @map("person_uncertain")
-  categoryId      String?  @map("category_id")
+  personUncertain Boolean @default(false) @map("person_uncertain")
+  categoryId      String? @map("category_id")
 
   /// Je Feldname: { confidence, page, quote, verification, source }.
   /// source = 'USER' schuetzt den Wert vor jeder erneuten Analyse.
@@ -301,12 +301,12 @@ model Document {
   searchVector Unsupported("tsvector")? @map("search_vector")
 
   // --- Verlauf ----------------------------------------------
-  ocrAt      DateTime? @map("ocr_at")
-  analyzedAt DateTime? @map("analyzed_at")
+  ocrAt      DateTime? @map("ocr_at") @db.Timestamptz(3)
+  analyzedAt DateTime? @map("analyzed_at") @db.Timestamptz(3)
   pageCount  Int       @default(0) @map("page_count")
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   person        Person?              @relation(fields: [personId], references: [id], onDelete: SetNull)
@@ -322,6 +322,9 @@ model Document {
   conversations AiConversation[]
   sources       AiSource[]
 
+  @@index([searchVector], type: Gin)
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([sender(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([userId, deletedAt, lifecycle, createdAt(sort: Desc)])
   @@index([userId, processingStatus])
   @@index([userId, personId])
@@ -345,7 +348,7 @@ model DocumentFile {
   /// Pruefsumme: erkennt Dubletten beim Hochladen und beschaedigte Ablagen.
   sha256       String
   sortOrder    Int      @default(0) @map("sort_order")
-  createdAt    DateTime @default(now()) @map("created_at")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   document Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
   user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -388,8 +391,8 @@ model DocumentPage {
   /// Volltextindex ueber den Seitentext. Erzeugte Spalte, siehe Migration.
   searchVector Unsupported("tsvector")? @map("search_vector")
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   document Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
   user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -397,6 +400,7 @@ model DocumentPage {
   sources  AiSource[]
 
   @@unique([documentId, pageNumber])
+  @@index([searchVector], type: Gin)
   @@index([userId])
   @@index([fileId])
   @@map("document_pages")
@@ -421,13 +425,14 @@ model DocumentIdentifier {
   /// AI | USER
   source       String       @default("AI")
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([documentId, kind, normalized])
+  @@index([normalized(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([userId, normalized])
   @@map("document_identifiers")
 }
@@ -459,13 +464,13 @@ model AnalysisRun {
   kind       RunKind
   status     RunStatus @default(RUNNING)
 
-  provider String?
-  model    String?
+  provider  String?
+  model     String?
   /// Hash der Eingabe. Gleicher Hash und bereits erfolgreich = ueberspringen.
   inputHash String? @map("input_hash")
 
-  startedAt  DateTime  @default(now()) @map("started_at")
-  finishedAt DateTime? @map("finished_at")
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(3)
 
   inputTokens  Int? @map("input_tokens")
   outputTokens Int? @map("output_tokens")
@@ -514,19 +519,19 @@ model ProcessingJob {
   /// zweiter Klick auf "Erneut versuchen" einen doppelten Auftrag anlegt.
   dedupeKey  String    @default("") @map("dedupe_key")
 
-  runAfter    DateTime @default(now()) @map("run_after")
+  runAfter    DateTime @default(now()) @map("run_after") @db.Timestamptz(3)
   attempts    Int      @default(0)
   maxAttempts Int      @default(3) @map("max_attempts")
 
   /// Pacht statt Sperre: Stuerzt der Worker mitten im Auftrag ab, holt der
   /// naechste Lauf den Auftrag nach Ablauf zurueck.
   lockedBy    String?   @map("locked_by")
-  lockedUntil DateTime? @map("locked_until")
+  lockedUntil DateTime? @map("locked_until") @db.Timestamptz(3)
   lastError   String?   @map("last_error")
 
-  createdAt  DateTime  @default(now()) @map("created_at")
-  startedAt  DateTime? @map("started_at")
-  finishedAt DateTime? @map("finished_at")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  startedAt  DateTime? @map("started_at") @db.Timestamptz(3)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(3)
 
   document Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
   user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -576,29 +581,29 @@ model Task {
   kind   TaskKind   @default(TASK)
   status TaskStatus @default(PROPOSED)
 
-  title       String
-  description String?
-  dueDate     DateTime? @map("due_date") @db.Date
+  title        String
+  description  String?
+  dueDate      DateTime? @map("due_date") @db.Date
   /// Frist aus einer relativen Angabe berechnet - der Benutzer sollte sie
   /// pruefen.
-  dueUncertain Boolean  @default(false) @map("due_uncertain")
+  dueUncertain Boolean   @default(false) @map("due_uncertain")
   /// Klartext der Herleitung, z. B. "innerhalb von 2 Wochen ab 12.03.2026".
-  dueRule      String?  @map("due_rule")
+  dueRule      String?   @map("due_rule")
 
-  page         Int?
-  quote        String?
-  verification Verification @default(UNVERIFIED)
-  confidence   Int?
+  page          Int?
+  quote         String?
+  verification  Verification @default(UNVERIFIED)
+  confidence    Int?
   /// AI | USER
-  source       String       @default("AI")
-  analysisRunId String?     @map("analysis_run_id")
+  source        String       @default("AI")
+  analysisRunId String?      @map("analysis_run_id")
   /// Erkennt denselben Vorschlag bei einer erneuten Analyse wieder.
-  dedupeKey     String?     @map("dedupe_key")
+  dedupeKey     String?      @map("dedupe_key")
 
   postponedTo DateTime? @map("postponed_to") @db.Date
-  completedAt DateTime? @map("completed_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   document  Document?  @relation(fields: [documentId], references: [id], onDelete: Cascade)
@@ -641,17 +646,17 @@ model Payment {
   iban      String?
   recipient String?
 
-  page         Int?
-  quote        String?
-  verification Verification @default(UNVERIFIED)
-  confidence   Int?
-  source       String       @default("AI")
-  analysisRunId String?     @map("analysis_run_id")
-  dedupeKey     String?     @map("dedupe_key")
+  page          Int?
+  quote         String?
+  verification  Verification @default(UNVERIFIED)
+  confidence    Int?
+  source        String       @default("AI")
+  analysisRunId String?      @map("analysis_run_id")
+  dedupeKey     String?      @map("dedupe_key")
 
-  paidAt    DateTime? @map("paid_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  paidAt    DateTime? @map("paid_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   document  Document?  @relation(fields: [documentId], references: [id], onDelete: Cascade)
@@ -666,18 +671,18 @@ model Payment {
 /// des Dashboards nachgezogen, nicht von einem Zeitgeber erzeugt - bei einem
 /// Benutzer ist das einfacher und genauso zuverlaessig.
 model Reminder {
-  id        String @id @default(cuid())
-  userId    String @map("user_id")
+  id        String  @id @default(cuid())
+  userId    String  @map("user_id")
   taskId    String? @map("task_id")
   paymentId String? @map("payment_id")
 
-  daysBefore Int      @map("days_before")
-  remindAt   DateTime @map("remind_at")
-  seenAt     DateTime? @map("seen_at")
+  daysBefore Int       @map("days_before")
+  remindAt   DateTime  @map("remind_at") @db.Timestamptz(3)
+  seenAt     DateTime? @map("seen_at") @db.Timestamptz(3)
   /// Fuer spaetere Zustellwege (E-Mail, Push).
-  sentAt     DateTime? @map("sent_at")
+  sentAt     DateTime? @map("sent_at") @db.Timestamptz(3)
 
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   task    Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -711,8 +716,8 @@ model AiConversation {
   scope      ConversationScope @default(GLOBAL)
   documentId String?           @map("document_id")
   title      String?
-  createdAt  DateTime          @default(now()) @map("created_at")
-  updatedAt  DateTime          @updatedAt @map("updated_at")
+  createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   document Document?   @relation(fields: [documentId], references: [id], onDelete: Cascade)
@@ -736,10 +741,10 @@ model AiMessage {
 
   provider     String?
   model        String?
-  inputTokens  Int? @map("input_tokens")
-  outputTokens Int? @map("output_tokens")
+  inputTokens  Int?    @map("input_tokens")
+  outputTokens Int?    @map("output_tokens")
 
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -752,18 +757,18 @@ model AiMessage {
 /// Der Beleg zu einer einzelnen Aussage. Ohne Eintrag hier darf keine
 /// dokumentenbasierte Behauptung stehen bleiben.
 model AiSource {
-  id         String @id @default(cuid())
-  messageId  String @map("message_id")
-  userId     String @map("user_id")
-  documentId String @map("document_id")
-  pageId     String? @map("page_id")
-  page       Int
-  quote      String
+  id           String       @id @default(cuid())
+  messageId    String       @map("message_id")
+  userId       String       @map("user_id")
+  documentId   String       @map("document_id")
+  pageId       String?      @map("page_id")
+  page         Int
+  quote        String
   verification Verification @default(VERIFIED)
   /// Stellung in der Fakenliste der Antwort, fuer die Fussnoten.
-  claimIndex Int    @map("claim_index")
+  claimIndex   Int          @map("claim_index")
 
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   message  AiMessage     @relation(fields: [messageId], references: [id], onDelete: Cascade)
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)

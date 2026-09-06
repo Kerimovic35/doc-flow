@@ -21,7 +21,16 @@ function createClient(): PrismaClient {
   // Prisma 7 verbindet ueber einen Treiber-Adapter statt ueber eine native
   // Engine-Binary. Fuer den VPS bedeutet das: reines JavaScript, nichts
   // Plattformabhaengiges im Deployment.
-  const adapter = new PrismaPg({ connectionString: url });
+  //
+  // Die Sitzungszeitzone steht fest auf UTC. Der Grund ist eine Falle, die
+  // einmal die ganze Warteschlange stillstehen liess: Der Treiber behandelt
+  // Zeitstempel als ortszeitlich. Laeuft die Sitzung unter Europe/Berlin -
+  // und genau das empfiehlt das README fuer den Container -, liegen von
+  // Prisma geschriebene Werte und die Datenbankuhr NOW() zwei Stunden
+  // auseinander. Ueber Prisma allein faellt das nie auf, weil sich der
+  // Versatz beim Zurueckelesen aufhebt; in jeder Rohabfrage dagegen schon.
+  // Mit UTC ist der Versatz null, und beide Wege stimmen ueberein.
+  const adapter = new PrismaPg({ connectionString: url, options: '-c timezone=UTC' });
 
   return new PrismaClient({
     adapter,

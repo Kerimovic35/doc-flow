@@ -22,7 +22,9 @@ if (!/docflow_test/.test(TEST_DATABASE_URL)) {
 }
 
 export const testDb = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: TEST_DATABASE_URL }),
+  // Sitzungszeitzone wie in der Anwendung fest auf UTC - sonst pruefte der
+  // Test etwas anderes, als spaeter laeuft (siehe src/server/db.ts).
+  adapter: new PrismaPg({ connectionString: TEST_DATABASE_URL, options: '-c timezone=UTC' }),
 });
 
 /**

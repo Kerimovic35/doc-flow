@@ -18,9 +18,22 @@ import { log } from '@/server/log';
 const worker = startWorker(HANDLERS);
 const scheduler = startScheduler();
 
+/**
+ * Haelt den Prozess am Leben.
+ *
+ * Die Zeitgeber der Warteschleife sind bewusst `unref` - sonst haengte ein
+ * Test nach dem Anhalten des Workers noch bis zum naechsten Weckruf. Ohne
+ * einen einzigen Zeitgeber mit Referenz haette Node hier aber nichts mehr zu
+ * tun und beendete sich sofort nach dem Start. In der Anwendung haelt der
+ * Webserver den Prozess; als eigenstaendiger Prozess muss es diese Zeile
+ * tun.
+ */
+const keepAlive = setInterval(() => {}, 60_000);
+
 async function shutdown(signal: string) {
   log.info('worker.signal', { signal });
   scheduler.stop();
+  clearInterval(keepAlive);
   // Laufenden Auftrag zu Ende bringen: Ein mitten in der Texterkennung
   // abgebrochener Lauf haette halbe Ergebnisse hinterlassen.
   await worker.stop();

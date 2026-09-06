@@ -110,21 +110,28 @@ interface ClaimRow {
  * bearbeitende Worker ist dann abgestuerzt).
  */
 export async function claimNextJob(workerId: string, tx: Tx = db): Promise<ClaimedJob | null> {
-  const now = new Date();
-  const lockedUntil = new Date(now.getTime() + LEASE_MS);
+  // Die Zeitpunkte kommen aus der Datenbank, nicht aus JavaScript.
+  //
+  // Das ist keine Stilfrage: Ein JS-Date als Parameter einer Rohabfrage wird
+  // von Prisma nicht als timestamptz gebunden, sondern um den
+  // Zeitzonenversatz verschoben - unter Europe/Berlin um zwei Stunden. Ein
+  // gerade eingestellter Auftrag galt damit als "noch nicht faellig", und die
+  // Warteschlange stand still, ohne dass irgendwo ein Fehler auftauchte.
+  // NOW() macht die Datenbankuhr zur einzigen Zeitquelle.
+  const leaseSeconds = Math.round(LEASE_MS / 1000);
 
   const rows = await tx.$queryRaw<ClaimRow[]>`
     UPDATE "processing_jobs" AS j
     SET "status" = 'RUNNING',
         "locked_by" = ${workerId},
-        "locked_until" = ${lockedUntil},
-        "started_at" = COALESCE(j."started_at", ${now}),
+        "locked_until" = NOW() + make_interval(secs => ${leaseSeconds}),
+        "started_at" = COALESCE(j."started_at", NOW()),
         "attempts" = j."attempts" + 1
     WHERE j."id" = (
       SELECT c."id"
       FROM "processing_jobs" AS c
-      WHERE (c."status" = 'PENDING' AND c."run_after" <= ${now})
-         OR (c."status" = 'RUNNING' AND c."locked_until" < ${now})
+      WHERE (c."status" = 'PENDING' AND c."run_after" <= NOW())
+         OR (c."status" = 'RUNNING' AND c."locked_until" < NOW())
       ORDER BY c."run_after" ASC, c."created_at" ASC
       FOR UPDATE SKIP LOCKED
       LIMIT 1

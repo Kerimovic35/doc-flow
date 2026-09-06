@@ -108,6 +108,33 @@ describe('Auftrag holen', () => {
     expect(wiederholt?.attempts).toBe(2);
   });
 
+  it('holt auch einen Auftrag, dessen Fälligkeit die Datenbank gesetzt hat', async () => {
+    // Der Fall, der die Warteschlange einmal stillstehen liess: Ein JS-Date
+    // als Parameter einer Rohabfrage wird von Prisma um den
+    // Zeitzonenversatz verschoben. Verglich man damit gegen einen von der
+    // Datenbank gesetzten Zeitpunkt, galt ein gerade eingestellter Auftrag
+    // als "noch nicht faellig" - ohne Fehlermeldung, ohne Spur im
+    // Protokoll. Deshalb rechnet die Abfrage jetzt mit NOW().
+    const jobId = await enqueue({ type: 'DAILY_MAINTENANCE', dedupeKey: 'db-zeit' });
+    await testDb.$executeRawUnsafe(
+      `UPDATE "processing_jobs" SET "run_after" = NOW() - interval '1 second' WHERE "id" = $1`,
+      jobId,
+    );
+
+    const job = await claimNextJob('worker-1');
+    expect(job?.id).toBe(jobId);
+  });
+
+  it('lässt einen von der Datenbank in die Zukunft gesetzten Auftrag liegen', async () => {
+    const jobId = await enqueue({ type: 'DAILY_MAINTENANCE', dedupeKey: 'db-zukunft' });
+    await testDb.$executeRawUnsafe(
+      `UPDATE "processing_jobs" SET "run_after" = NOW() + interval '1 hour' WHERE "id" = $1`,
+      jobId,
+    );
+
+    expect(await claimNextJob('worker-1')).toBeNull();
+  });
+
   it('zählt die Versuche mit', async () => {
     await enqueue({ type: 'DAILY_MAINTENANCE', dedupeKey: 'zaehlen' });
     const job = await claimNextJob('worker-1');
