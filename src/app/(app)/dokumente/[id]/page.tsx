@@ -7,7 +7,9 @@ import { requireUser } from '@/server/auth/context';
 import { listCategories } from '@/server/services/categories';
 import { getDocument } from '@/server/services/documents';
 import { listPersons } from '@/server/services/persons';
+import { Chat } from '@/components/ai/chat';
 import { PaymentCard, TaskCard } from '@/components/documents/proposal-card';
+import { listConversations, getConversation } from '@/server/services/conversations';
 import { listPayments } from '@/server/services/payments';
 import { listTasks } from '@/server/services/tasks';
 import { DocumentTabs, PageViewer, ProcessingBanner } from './document-view';
@@ -23,13 +25,20 @@ export default async function DocumentPage({ params }: { params: Promise<{ id: s
   const document = await getDocument(actor, id);
   if (!document) notFound();
 
-  const [persons, categories, tasks, payments, identifiers] = await Promise.all([
+  const [persons, categories, tasks, payments, identifiers, conversations] = await Promise.all([
     listPersons(actor),
     listCategories(actor),
     listTasks(actor, { documentId: id, status: ['PROPOSED', 'OPEN', 'POSTPONED'] }),
     listPayments(actor, { documentId: id, status: ['PROPOSED', 'OPEN'] }),
     listIdentifiers(actor, id),
+    listConversations(actor, { scope: 'DOCUMENT', documentId: id, limit: 1 }),
   ]);
+
+  // Ein Gespraech je Dokument genuegt: Die Frage bezieht sich ohnehin immer
+  // auf dasselbe Schreiben.
+  const conversation = conversations[0]
+    ? await getConversation(actor, conversations[0].id)
+    : null;
   const meta = readFieldMeta(document.fieldMeta);
 
   const title = document.title ?? document.sender ?? 'Ohne Titel';
@@ -205,6 +214,25 @@ export default async function DocumentPage({ params }: { params: Promise<{ id: s
                   ))
                 )}
               </div>
+            }
+            chat={
+              <Chat
+                conversationId={conversation?.id ?? null}
+                documentId={document.id}
+                initialMessages={(conversation?.messages ?? []).map((message) => ({
+                  id: message.id,
+                  role: message.role,
+                  content: message.content,
+                  sources: message.sources,
+                  interpretation: message.interpretation,
+                  notFound: message.notFound,
+                }))}
+                suggestions={[
+                  'Was muss ich hier tun?',
+                  'Bis wann muss ich reagieren?',
+                  'Welche Unterlagen werden verlangt?',
+                ]}
+              />
             }
           />
 

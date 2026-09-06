@@ -1,10 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import { runChat } from './anthropic-chat';
 import {
   AiRefusalError,
   AiSchemaError,
   AiUnavailableError,
   type AiProvider,
+  type ChatRequest,
+  type ChatResult,
   type ContentPart,
   type ExtractRequest,
   type ExtractResult,
@@ -108,6 +111,10 @@ export class AnthropicProvider implements AiProvider {
         ),
       },
     };
+  }
+
+  chat<T>(request: ChatRequest<T>): Promise<ChatResult<T>> {
+    return runChat(this.getClient(), request, estimateCents);
   }
 }
 

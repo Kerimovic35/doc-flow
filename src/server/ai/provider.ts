@@ -34,12 +34,43 @@ export interface ExtractResult<T> {
   usage: Usage;
 }
 
+/** Ein Werkzeug, das das Modell aufrufen darf. */
+export interface ToolSpec {
+  name: string;
+  description: string;
+  /** JSON-Schema der Eingabe. */
+  inputSchema: Record<string, unknown>;
+  run(input: unknown): Promise<string>;
+}
+
+export interface ChatRequest<T> {
+  system: string;
+  /** Der bisherige Verlauf, aelteste Nachricht zuerst. */
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  tools: ToolSpec[];
+  /** Aufbau der erwarteten Endantwort. */
+  schema: z.ZodType<T>;
+  model: string;
+  effort?: string;
+  /** Hoechstzahl der Werkzeugrunden, bevor abgebrochen wird. */
+  maxRounds?: number;
+}
+
+export interface ChatResult<T> {
+  data: T;
+  usage: Usage;
+  /** Welche Werkzeuge in welcher Reihenfolge liefen - fuer das Protokoll. */
+  toolCalls: string[];
+}
+
 export interface AiProvider {
   readonly kind: 'ANTHROPIC' | 'OLLAMA' | 'FAKE';
   readonly name: string;
   /** Ist ein Schluessel hinterlegt und der Anbieter erreichbar? */
   available(): boolean;
   extract<T>(request: ExtractRequest<T>): Promise<ExtractResult<T>>;
+  /** Gespraech mit Werkzeugen. Das Ergebnis folgt dem uebergebenen Schema. */
+  chat<T>(request: ChatRequest<T>): Promise<ChatResult<T>>;
 }
 
 /**

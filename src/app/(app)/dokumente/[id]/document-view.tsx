@@ -113,17 +113,19 @@ export function ProcessingBanner({
   );
 }
 
-/** Umschalter zwischen Seiten, erkanntem Text und Angaben. */
+/** Umschalter zwischen Seiten, Angaben, Text und Nachfrage. */
 export function DocumentTabs({
   pages,
   meta,
   text,
+  chat,
 }: {
   pages: React.ReactNode;
   meta: React.ReactNode;
   text: React.ReactNode;
+  chat: React.ReactNode;
 }) {
-  const [tab, setTab] = useState<'seiten' | 'angaben' | 'text'>('seiten');
+  const [tab, setTab] = useState<'seiten' | 'angaben' | 'text' | 'fragen'>('seiten');
 
   return (
     <div className="flex flex-col gap-4">
@@ -141,11 +143,17 @@ export function DocumentTabs({
         <TabButton active={tab === 'text'} onClick={() => setTab('text')}>
           Text
         </TabButton>
+        <TabButton active={tab === 'fragen'} onClick={() => setTab('fragen')}>
+          Fragen
+        </TabButton>
       </div>
 
       <div hidden={tab !== 'seiten'}>{pages}</div>
       <div hidden={tab !== 'angaben'}>{meta}</div>
       <div hidden={tab !== 'text'}>{text}</div>
+      {/* Der Chat wird erst beim Oeffnen gerendert - sonst liefe die
+          Verlaufsabfrage bei jedem Seitenaufruf mit. */}
+      {tab === 'fragen' && <div>{chat}</div>}
     </div>
   );
 }

@@ -254,14 +254,22 @@ function Evidence({
       {quote && <p className="text-text-muted text-xs italic">&bdquo;{quote}&ldquo;</p>}
 
       <p className="text-text-muted text-xs">
-        {documentId && documentTitle ? (
-          <Link href={`/dokumente/${documentId}`} className="text-accent font-medium">
-            {documentTitle}
-          </Link>
+        {/*
+          "Selbst eingetragen" darf nur dastehen, wenn es wirklich kein
+          Dokument gibt. In der Dokumentansicht ist der Titel nur
+          ausgeblendet, weil er ueber der Seite steht - dort waere der
+          Hinweis schlicht falsch.
+        */}
+        {documentId ? (
+          documentTitle ? (
+            <Link href={`/dokumente/${documentId}`} className="text-accent font-medium">
+              {documentTitle}
+            </Link>
+          ) : null
         ) : (
           <span>Selbst eingetragen</span>
         )}
-        {page !== null && ` · Seite ${page}`}
+        {page !== null && `${documentId && documentTitle ? ' · ' : ''}Seite ${page}`}
         {personName && ` · ${personName}`}
       </p>
     </div>
