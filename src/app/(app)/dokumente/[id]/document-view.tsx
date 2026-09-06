@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { statusLabel } from '@/components/documents/status-badge';
 import { WarningIcon } from '@/components/ui/icons';
@@ -184,7 +184,13 @@ function TabButton({
   );
 }
 
-/** Seitenbild in voller Groesse, ueber einen Klick auf die Vorschau. */
+/**
+ * Seitenbild in voller Groesse.
+ *
+ * Oeffnet sich auch von aussen: Ein Verweis mit `?seite=2` - etwa aus einer
+ * Fussnote des Assistenten - springt direkt auf die Seite. Ohne diesen Weg
+ * bliebe die Fundstelle eine Behauptung, die niemand nachschlaegt.
+ */
 export function PageViewer({
   documentId,
   pages,
@@ -192,7 +198,14 @@ export function PageViewer({
   documentId: string;
   pages: Array<{ id: string; pageNumber: number }>;
 }) {
-  const [open, setOpen] = useState<number | null>(null);
+  const params = useSearchParams();
+  const wanted = Number(params.get('seite') ?? '');
+
+  const [open, setOpen] = useState<number | null>(() => {
+    if (!Number.isInteger(wanted)) return null;
+    const index = pages.findIndex((page) => page.pageNumber === wanted);
+    return index >= 0 ? index : null;
+  });
 
   if (pages.length === 0) {
     return <p className="text-text-muted text-sm">Noch keine Seiten aufbereitet.</p>;

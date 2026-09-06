@@ -262,7 +262,10 @@ function Evidence({
         */}
         {documentId ? (
           documentTitle ? (
-            <Link href={`/dokumente/${documentId}`} className="text-accent font-medium">
+            <Link
+              href={page !== null ? `/dokumente/${documentId}?seite=${page}` : `/dokumente/${documentId}`}
+              className="text-accent font-medium"
+            >
               {documentTitle}
             </Link>
           ) : null

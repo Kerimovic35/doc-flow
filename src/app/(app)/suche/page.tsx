@@ -82,7 +82,11 @@ export default async function SearchPage({
               {result.hits.map((hit) => (
                 <li key={hit.id}>
                   <Link
-                    href={`/dokumente/${hit.id}`}
+                    href={
+                      hit.matchPage !== null
+                        ? `/dokumente/${hit.id}?seite=${hit.matchPage}`
+                        : `/dokumente/${hit.id}`
+                    }
                     className="border-border bg-surface active:bg-surface-muted flex gap-3 rounded-2xl border p-3"
                   >
                     <div className="bg-surface-muted h-16 w-12 shrink-0 overflow-hidden rounded-lg">

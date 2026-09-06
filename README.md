@@ -28,7 +28,7 @@ src/app/          Routen, Server Actions (dünne Adapter)
 src/server/       Fachlogik: Dienste, Warteschlange, Verarbeitung, KI
 src/lib/          reine Funktionen: Parsen, Normalisieren, Validieren
 prisma/           Datenmodell und Migrationen
-scripts/          Wiederherstellung
+scripts/          Wiederherstellung, Durchstich, Lasttest
 data/             Originaldateien und Backups (lokal, nicht im Repository)
 ```
 
@@ -269,6 +269,26 @@ Fundstelle und zählen in keiner Übersicht mit, bis sie bestätigt wurden.
 **Relative Fristen rechnet die Anwendung, nicht das Modell.** Aus „innerhalb von zwei
 Wochen" wird ein Datum, das seine Herleitung sichtbar mitträgt und als unsicher
 gekennzeichnet ist — der Bezugspunkt ist eine Annahme.
+
+## Geschwindigkeit
+
+Gemessen mit 3000 Dokumenten und 6000 Seiten auf einem gewöhnlichen Arbeitsrechner
+(`npx tsx scripts/perf-seed.ts 3000`, dann `npx tsx scripts/perf-search.ts`):
+
+| Vorgang | Median |
+|---|---|
+| Wortsuche über den gesamten Text | 26–36 ms |
+| Aktenzeichen exakt | 17 ms |
+| Tippfehler im Absender (Trigramme) | 23 ms |
+| Letzte Seite einer langen Trefferliste | 71 ms |
+| Startbildschirm vollständig | 15 ms |
+
+Der Ausführungsplan zeigt eine Besonderheit: Die Dokumenttabelle wird sequenziell
+gelesen, weil die Suche über zwei Wege gleichzeitig geht (eigene Angaben *oder*
+Seitentext) und PostgreSQL diese Verknüpfung nicht über einen Index auflösen kann. Bei
+dieser Größenordnung kostet das rund drei Millisekunden. Erst bei einigen zehntausend
+Dokumenten lohnte es, die Abfrage in zwei Teile mit `UNION` zu zerlegen — für ein
+privates Archiv ist das absehbar nicht nötig.
 
 ## Grundregeln der Datenhaltung
 

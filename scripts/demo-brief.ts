@@ -9,7 +9,7 @@
  */
 import 'dotenv/config';
 import sharp from 'sharp';
-import { createPrismaClient } from '../src/server/db';
+import { createPrismaClient } from '../src/server/prisma-client';
 
 const db = createPrismaClient(process.env.DATABASE_URL!);
 

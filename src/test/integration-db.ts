@@ -1,5 +1,8 @@
 import type { PrismaClient } from '@/generated/prisma/client';
-import { createPrismaClient } from '@/server/db';
+// Ausdruecklich aus prisma-client, NICHT aus @/server/db: Dieses Modul wird
+// in den Integrationstests ersetzt, und ein Import von hier schloesse einen
+// Kreis, der den Testlauf wortlos haengen liesse.
+import { createPrismaClient } from '@/server/prisma-client';
 import { ensureUserDefaults } from '@/server/services/defaults';
 
 /**

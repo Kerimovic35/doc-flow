@@ -228,7 +228,15 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
                 &bdquo;{source.quote}&ldquo;
               </p>
               <p className="text-text-muted mt-1 text-xs">
-                <Link href={`/dokumente/${source.documentId}`} className="text-accent font-medium">
+                {/*
+                  Der Verweis fuehrt auf die Seite, nicht nur auf das
+                  Dokument. Sonst muesste man die Fundstelle selbst suchen -
+                  und genau das nimmt einem die Anwendung ab.
+                */}
+                <Link
+                  href={`/dokumente/${source.documentId}?seite=${source.page}`}
+                  className="text-accent font-medium"
+                >
                   {source.documentTitle ?? 'Dokument'}
                 </Link>
                 {` · Seite ${source.page}`}

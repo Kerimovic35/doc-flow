@@ -148,9 +148,14 @@ Diese Regeln tragen die Glaubwürdigkeit der gesamten Anwendung.
   `deploy`.
 - **Dateiuploads laufen über Route Handler**, nicht über Server Actions: nur so gibt es
   eine Fortschrittsanzeige, und mehrere Fotos sprengen sonst das Body-Limit.
-- **Jeder eigene Prisma-Client entsteht über `createPrismaClient`** (`src/server/db.ts`).
-  Ein von Hand zusammengebauter Client vergisst die Zeitzone, und dann liegen seine
-  Zeitstempel um den Zeitzonenversatz daneben — lautlos.
+- **Jeder eigene Prisma-Client entsteht über `createPrismaClient`**
+  (`src/server/prisma-client.ts`). Ein von Hand zusammengebauter Client vergisst die
+  Zeitzone, und dann liegen seine Zeitstempel um den Zeitzonenversatz daneben — lautlos.
+- **Nichts, was `src/test/integration-db.ts` lädt, darf `@/server/db` importieren.**
+  Dieses Modul wird in jedem Integrationstest ersetzt, und die Ersetzung lädt ihrerseits
+  die Testhilfe. Ein Import von dort schließt den Kreis, und der Testlauf bleibt wortlos
+  hängen — kein Fehler, keine Ausgabe, nur Stillstand. Deshalb liegen
+  `createPrismaClient` und `ensureUserDefaults` in eigenen Modulen.
 - **`notFound()` liefert auf geschützten Seiten den Status 200**, weil die Hülle eine
   Ladeansicht hat und Next deshalb sofort streamt. Der Inhalt ist trotzdem die
   Nicht-gefunden-Seite; geprüft wird die Eigenschaft, nicht der Status

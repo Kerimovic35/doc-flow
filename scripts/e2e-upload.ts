@@ -11,7 +11,7 @@
 import 'dotenv/config';
 import { createHash, randomBytes } from 'node:crypto';
 import sharp from 'sharp';
-import { createPrismaClient } from '../src/server/db';
+import { createPrismaClient } from '../src/server/prisma-client';
 
 const BASE = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3000';
 const db = createPrismaClient(process.env.DATABASE_URL!);

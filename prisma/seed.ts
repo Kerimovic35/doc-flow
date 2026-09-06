@@ -8,7 +8,7 @@
  */
 import 'dotenv/config';
 import { hashPassword } from '../src/server/auth/password';
-import { createPrismaClient } from '../src/server/db';
+import { createPrismaClient } from '../src/server/prisma-client';
 import { ensureUserDefaults } from '../src/server/services/defaults';
 
 const connectionString = process.env.DATABASE_URL;
