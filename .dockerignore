@@ -40,7 +40,12 @@ src/generated
 **/*.test.ts
 **/*.int.test.ts
 src/test
-scripts
+
+# Von den Skripten braucht die Laufzeit nur die Wiederherstellung; sie wird im
+# Container ausgefuehrt (siehe README). Alles andere ist Entwicklungswerkzeug
+# und hat im Abbild nichts zu suchen.
+scripts/*
+!scripts/restore.sh
 vitest.config.ts
 vitest.integration.config.ts
 
