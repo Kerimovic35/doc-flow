@@ -176,3 +176,20 @@ describe('Sicherheit begrenzen', () => {
     expect(cappedConfidence(-5, 'VERIFIED', false)).toBe(0);
   });
 });
+
+describe('Laengengrenzen des Zitats', () => {
+  it('verwirft ein zu kurzes Zitat, auch wenn es im Text steht', () => {
+    // "AOK" kommt woertlich vor, belegt aber nichts - drei Zeichen passen
+    // in jeden Brief. Frueher hielt das Schema solche Zitate ab.
+    expect(checkQuote({ page: 1, quote: 'AOK' }, PAGES).found).toBe(false);
+  });
+
+  it('verwirft ein Zitat, das laenger als eine Belegstelle ist', () => {
+    const zuLang = 'x'.repeat(241);
+    expect(checkQuote({ page: 1, quote: zuLang }, PAGES).found).toBe(false);
+  });
+
+  it('nimmt ein Zitat an der unteren Grenze an', () => {
+    expect(checkQuote({ page: 1, quote: 'Bescheid' }, PAGES).found).toBe(true);
+  });
+});

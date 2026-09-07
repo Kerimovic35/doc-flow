@@ -19,7 +19,17 @@ import { PermanentJobError, type ClaimedJob, type JobHandler } from './types';
  */
 
 const IDLE_MIN_MS = 2000;
-const IDLE_MAX_MS = 15000;
+
+/*
+ * Die Obergrenze im Leerlauf bestimmt, wie lange ein frisch hochgeladenes
+ * Dokument liegen bleibt, bevor ueberhaupt etwas passiert.
+ *
+ * Bei 15 Sekunden waren es gemessene 12 Sekunden Warten vor dem ersten
+ * Schritt - und da die Pipeline drei Auftraege nacheinander abarbeitet, fiel
+ * das dreimal an. Die Abfrage ist ein einzelner Index-Zugriff; sie alle drei
+ * Sekunden zu stellen, kostet auf einem kleinen VPS nichts Messbares.
+ */
+const IDLE_MAX_MS = 3000;
 const HEARTBEAT_KEY = 'worker';
 
 export interface WorkerHandle {

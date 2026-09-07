@@ -1,5 +1,5 @@
 import { findQuote, type FoundQuote } from '@/lib/text/fuzzy-find';
-import type { Evidence } from '@/lib/ai/analysis-schema';
+import { LAENGEN, type Evidence } from '@/lib/ai/analysis-schema';
 
 /**
  * Die Belegpruefung.
@@ -56,6 +56,19 @@ const NOT_FOUND: QuoteCheck = {
  */
 export function checkQuote(evidence: Evidence | null, pages: PageText[]): QuoteCheck {
   if (!evidence) return NOT_FOUND;
+
+  /*
+   * Die Laengenpruefung steht hier und nicht im Schema: Schranken im Schema
+   * blaehen die Grammatik der erzwungenen Dekodierung auf (siehe LAENGEN).
+   *
+   * Ein zu kurzes Zitat belegt nichts - "am" findet sich in jedem Brief. Ein
+   * zu langes ist kein Zitat mehr, sondern eine Seite. Beides gilt als
+   * unbelegt statt als Beleg.
+   */
+  const zitat = evidence.quote.trim();
+  if (zitat.length < LAENGEN.zitatMindestens || zitat.length > LAENGEN.zitat) {
+    return NOT_FOUND;
+  }
 
   const claimed = pages.find((page) => page.pageNumber === evidence.page);
   const direct = claimed ? search(claimed, evidence.quote) : null;

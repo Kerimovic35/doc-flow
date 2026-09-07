@@ -53,6 +53,15 @@ describe('analysisSchema', () => {
 });
 
 describe('normalizeAnalysis', () => {
+  it('kuerzt eine ausufernde Zusammenfassung, statt sie zu verwerfen', () => {
+    const wire = { summary: 'a'.repeat(2000) } as unknown as AnalysisWire;
+
+    const { summary } = normalizeAnalysis(wire);
+
+    expect(summary).toHaveLength(1200);
+    expect(summary.endsWith('…')).toBe(true);
+  });
+
   it('macht aus einem fehlenden Feld ein leeres', () => {
     const wire = {
       sender: null,

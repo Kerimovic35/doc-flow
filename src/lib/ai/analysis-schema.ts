@@ -20,11 +20,34 @@ export const evidenceSchema = z.object({
   /**
    * Woertliches Zitat aus dem erkannten Text dieser Seite.
    *
-   * Mindestens sechs Zeichen: Kuerzeres belegt nichts. Hoechstens 240, damit
-   * kein halber Brief als "Beleg" durchgereicht wird.
+   * Ohne Laengenschranke im Schema - siehe LAENGEN weiter unten. Geprueft
+   * wird sie in `checkQuote`: Mindestens sechs Zeichen, denn Kuerzeres
+   * belegt nichts und passt fast ueberall; hoechstens 240, damit kein halber
+   * Brief als "Beleg" durchgereicht wird.
    */
-  quote: z.string().min(6).max(240),
+  quote: z.string(),
 });
+
+/**
+ * Laengengrenzen - bewusst NICHT im Schema.
+ *
+ * Bei erzwungener Dekodierung wird aus jedem `maxLength` eine Grammatik mit
+ * entsprechend vielen Wiederholungen. Neunzehn solcher Schranken, darunter
+ * 1200 Zeichen fuer die Zusammenfassung, liessen die Anfrage mit
+ * "The compiled grammar is too large" scheitern. Die Grenzen gehoeren
+ * ohnehin auf den Server: Das Modell soll sich kurz fassen, aber wenn es das
+ * nicht tut, ist das kein Grund, die ganze Analyse zu verlieren.
+ */
+export const LAENGEN = {
+  zitat: 240,
+  zitatMindestens: 6,
+  zusammenfassung: 1200,
+} as const;
+
+/** Schneidet zu langen Text ab, statt ihn zu verwerfen. */
+export function kuerze(text: string, grenze: number): string {
+  return text.length <= grenze ? text : `${text.slice(0, grenze - 1).trimEnd()}…`;
+}
 
 export type Evidence = z.infer<typeof evidenceSchema>;
 
@@ -63,12 +86,12 @@ export const dueSchema = z.discriminatedUnion('kind', [
 
 export const analysisSchema = z.object({
   /** Kurzer, sprechender Titel - so, wie man das Dokument suchen wuerde. */
-  title: field(z.string().max(200)),
+  title: field(z.string()),
   /** Bescheid, Rechnung, Vertrag, Mahnung … */
-  documentType: field(z.string().max(80)),
-  sender: field(z.string().max(160)),
-  recipient: field(z.string().max(160)),
-  subject: field(z.string().max(300)),
+  documentType: field(z.string()),
+  sender: field(z.string()),
+  recipient: field(z.string()),
+  subject: field(z.string()),
   documentDate: field(isoDate),
   receivedDate: field(isoDate),
 
@@ -83,7 +106,7 @@ export const analysisSchema = z.object({
     personId: z.string().nullable(),
     confidence: z.number().min(0).max(100),
     uncertain: z.boolean(),
-    reasoning: z.string().max(300),
+    reasoning: z.string(),
   }),
 
   /** Einer der vorgegebenen Kategorieschluessel oder null. */
@@ -96,7 +119,7 @@ export const analysisSchema = z.object({
   identifiers: z.array(
     z.object({
       kind: z.enum(['AKTENZEICHEN', 'KUNDENNUMMER', 'VERTRAGSNUMMER', 'REFERENZ', 'SONSTIGE']),
-      value: z.string().min(2).max(80),
+      value: z.string(),
       confidence: z.number().min(0).max(100),
       evidence: evidenceSchema,
     }),
@@ -105,14 +128,14 @@ export const analysisSchema = z.object({
   payments: z.array(
     z.object({
       /** Betrag als Zahl mit Punkt, z. B. "127.50". */
-      amount: z.string().max(24),
-      currency: z.string().max(3),
+      amount: z.string(),
+      currency: z.string(),
       /** OUTGOING: der Empfaenger muss zahlen. INCOMING: er bekommt Geld. */
       direction: z.enum(['OUTGOING', 'INCOMING']),
       due: dueSchema,
-      purpose: z.string().max(200).nullable(),
-      iban: z.string().max(40).nullable(),
-      recipient: z.string().max(160).nullable(),
+      purpose: z.string().nullable(),
+      iban: z.string().nullable(),
+      recipient: z.string().nullable(),
       confidence: z.number().min(0).max(100),
       evidence: evidenceSchema,
     }),
@@ -121,7 +144,7 @@ export const analysisSchema = z.object({
   /** Reine Fristen ohne Handlung. */
   deadlines: z.array(
     z.object({
-      title: z.string().min(3).max(200),
+      title: z.string(),
       due: dueSchema,
       confidence: z.number().min(0).max(100),
       evidence: evidenceSchema,
@@ -131,8 +154,8 @@ export const analysisSchema = z.object({
   /** Was der Empfaenger tun muss. */
   tasks: z.array(
     z.object({
-      title: z.string().min(3).max(200),
-      description: z.string().max(500).nullable(),
+      title: z.string(),
+      description: z.string().nullable(),
       due: dueSchema,
       confidence: z.number().min(0).max(100),
       evidence: evidenceSchema,
@@ -146,7 +169,7 @@ export const analysisSchema = z.object({
    * behaupten. In der Oberflaeche steht es deshalb ausdruecklich als
    * "Zusammenfassung der KI" und nicht als Dokumentinhalt.
    */
-  summary: z.string().max(1200),
+  summary: z.string(),
 });
 
 /** Was ueber die Leitung kommt: Felder duerfen ganz fehlen. */
@@ -184,6 +207,8 @@ export function normalizeAnalysis(wire: AnalysisWire): AnalysisOutput {
   for (const feld of Object.keys(FELDER)) {
     normalized[feld] = (wire as Record<string, unknown>)[feld] ?? { ...LEER };
   }
+
+  normalized.summary = kuerze(wire.summary ?? '', LAENGEN.zusammenfassung);
 
   return normalized as AnalysisOutput;
 }
