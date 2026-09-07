@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import type { z } from 'zod';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { runChat } from './anthropic-chat';
 import {
@@ -18,10 +19,13 @@ import {
  *
  * Zwei Dinge sind hier wichtiger als der Rest:
  *
- * 1. Strukturierte Ausgabe. Das Zod-Schema wird als Ausgabeformat
- *    mitgegeben, damit die Antwort nicht geparst, sondern garantiert
- *    passend geliefert wird. Ein Modell, das freien Text zurueckgibt, waere
- *    fuer eine Belegpruefung wertlos.
+ * 1. Die Antwort folgt einem Schema - aber geprueft wird sie hier, nicht
+ *    von der API. Erzwungene Dekodierung (`output_config.format`) waere
+ *    bequemer, scheitert bei unserem Analyse-Schema aber an der Groesse der
+ *    daraus uebersetzten Grammatik ("The compiled grammar is too large").
+ *    Also geben wir das Schema im Systemtext vor und pruefen die Antwort
+ *    mit demselben Zod-Schema. Fuer die Belegpruefung aendert das nichts:
+ *    Sie hat der Antwort ohnehin nie geglaubt.
  *
  * 2. Ablehnungen. `stop_reason: 'refusal'` kommt als HTTP 200 zurueck. Wer
  *    das nicht prueft, liest eine leere Antwort als "nichts gefunden" -
@@ -61,18 +65,17 @@ export class AnthropicProvider implements AiProvider {
   async extract<T>(request: ExtractRequest<T>): Promise<ExtractResult<T>> {
     const client = this.getClient();
 
-    const response = await client.messages.parse({
+    const response = await client.messages.create({
       model: request.model,
       max_tokens: 16000,
-      system: request.system,
+      system: `${request.system}\n\n${schemaAnweisung(request.schema)}`,
       messages: [{ role: 'user', content: toContentBlocks(request.content) }],
       // Nachdenken lassen: Fristen und Betraege aus einem Behoerdenbrief
       // herauszulesen ist keine Fleissaufgabe.
       thinking: { type: 'adaptive' },
-      output_config: {
-        format: zodOutputFormat(request.schema),
-        ...(request.effort ? { effort: request.effort as 'low' | 'medium' | 'high' } : {}),
-      },
+      ...(request.effort
+        ? { output_config: { effort: request.effort as 'low' | 'medium' | 'high' } }
+        : {}),
     });
 
     if (response.stop_reason === 'refusal') {
@@ -94,13 +97,10 @@ export class AnthropicProvider implements AiProvider {
       );
     }
 
-    const parsed = response.parsed_output;
-    if (!parsed) {
-      throw new AiSchemaError('Die Antwort der KI passte nicht zum erwarteten Aufbau.');
-    }
+    const parsed = parseAnswer(request.schema, textOf(response));
 
     return {
-      data: parsed as T,
+      data: parsed,
       usage: {
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
@@ -135,4 +135,72 @@ function estimateCents(model: string, inputTokens: number, outputTokens: number)
 
   const dollars = (inputTokens / 1_000_000) * price.input + (outputTokens / 1_000_000) * price.output;
   return Math.round(dollars * 100);
+}
+
+/**
+ * Das Schema als Anweisung, nicht als Grammatik.
+ *
+ * Die Vorgabe steht am Ende des Systemtextes, damit der stabile Teil davor
+ * zwischengespeichert werden kann.
+ */
+function schemaAnweisung(schema: z.ZodType<unknown>): string {
+  const format = zodOutputFormat(schema) as { schema?: unknown };
+
+  return [
+    'ANTWORTFORMAT',
+    '',
+    'Antworte ausschliesslich mit einem JSON-Objekt nach diesem Schema.',
+    'Kein einleitender Satz, keine Erklaerung, keine Code-Zaeune.',
+    'Felder, fuer die es keinen Beleg im Dokument gibt, sind null.',
+    '',
+    JSON.stringify(format.schema ?? format),
+  ].join('\n');
+}
+
+/** Sammelt den Text der Antwort; Denkbloecke bleiben aussen vor. */
+function textOf(response: { content: Array<{ type: string; text?: string }> }): string {
+  return response.content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text ?? '')
+    .join('')
+    .trim();
+}
+
+/**
+ * Prueft die Antwort gegen das Schema.
+ *
+ * Ohne erzwungene Dekodierung kann ein Modell den Zaun um das JSON legen
+ * oder einen Satz voranstellen. Beides ist billig zu beheben; alles andere
+ * ist ein echter Formfehler und wird als solcher gemeldet.
+ */
+export function parseAnswer<T>(schema: z.ZodType<T>, text: string): T {
+  const roh = ausJson(text);
+
+  if (roh === null) {
+    throw new AiSchemaError('Die Antwort der KI war kein JSON.');
+  }
+
+  const geprueft = schema.safeParse(roh);
+  if (!geprueft.success) {
+    throw new AiSchemaError('Die Antwort der KI passte nicht zum erwarteten Aufbau.');
+  }
+
+  return geprueft.data;
+}
+
+function ausJson(text: string): unknown {
+  const ohneZaun = text
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/, '')
+    .trim();
+
+  const start = ohneZaun.indexOf('{');
+  const ende = ohneZaun.lastIndexOf('}');
+  if (start === -1 || ende <= start) return null;
+
+  try {
+    return JSON.parse(ohneZaun.slice(start, ende + 1));
+  } catch {
+    return null;
+  }
 }

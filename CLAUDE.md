@@ -156,13 +156,21 @@ Diese Regeln tragen die Glaubwürdigkeit der gesamten Anwendung.
   die Testhilfe. Ein Import von dort schließt den Kreis, und der Testlauf bleibt wortlos
   hängen — kein Fehler, keine Ausgabe, nur Stillstand. Deshalb liegen
   `createPrismaClient` und `ensureUserDefaults` in eigenen Modulen.
-- **Das Analyse-Schema darf höchstens 16 Felder mit Vereinigungstyp haben.**
-  Anthropic lehnt mehr mit `400 invalid_request_error` ab. Ein `nullable`
-  zählt bereits als Vereinigung, und zwei davon je Feld sind bei sieben
-  Feldern schon die halbe Grenze — deshalb ist in `field()` das *ganze* Feld
-  optional und nicht Wert und Beleg einzeln. Der Testanbieter reicht das
-  Schema nie an die API, die Grenze fällt also erst in Produktion auf;
-  abgesichert ist sie durch `src/lib/ai/analysis-schema.test.ts`.
+- **Die Analyse nutzt keine erzwungene Dekodierung.** Das Schema geht als
+  Anweisung in den Systemtext, geprüft wird die Antwort mit demselben
+  Zod-Schema in `parseAnswer` (`src/server/ai/anthropic.ts`). Grund:
+  `output_config.format` übersetzt das Schema in eine Grammatik, und die
+  wächst mit Verschachtelung, nicht mit Zeichenzahl. Unser Analyse-Schema
+  sprengte erst die Grenze von 16 Feldern mit Vereinigungstyp und danach die
+  Größe der Grammatik selbst — vier Arrays aus Objekten mit bis zu neun
+  Eigenschaften und einer dreifachen Fallunterscheidung darin. Beide Grenzen
+  fallen erst in Produktion auf, weil der Testanbieter nie an die API geht.
+  Die Belegprüfung ändert das nicht: Sie hat der Antwort ohnehin nie
+  geglaubt.
+- **Längengrenzen für KI-Ausgaben gehören auf den Server, nicht ins Schema.**
+  `LAENGEN` in `src/lib/ai/analysis-schema.ts`; das Zitat prüft `checkQuote`,
+  die Zusammenfassung kürzt `normalizeAnalysis`. Zu langer Text kostet damit
+  nicht die ganze Analyse.
 - **Was das Laufzeit-Abbild kopiert, muss die `.dockerignore` durchlassen.**
   `scripts/` war vollständig ausgesperrt, obwohl das Dockerfile es kopiert
   (`restore.sh` läuft im Container). Der Build brach mit `"/scripts": not
