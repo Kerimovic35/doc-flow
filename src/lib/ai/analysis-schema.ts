@@ -28,13 +28,23 @@ export const evidenceSchema = z.object({
 
 export type Evidence = z.infer<typeof evidenceSchema>;
 
-/** Eine belegte Einzelangabe. */
+/**
+ * Eine belegte Einzelangabe - oder gar nichts.
+ *
+ * Das ganze Feld ist `null`, nicht Wert und Beleg einzeln. Das hat zwei
+ * Gruende. Fachlich ist es strenger: Es gibt keinen Wert ohne Zitat mehr,
+ * also keine Behauptung ohne Beleg. Technisch ist es noetig - die Anthropic-
+ * API laesst hoechstens 16 Felder mit Vereinigungstyp zu, und zwei
+ * `nullable` je Feld sprengten diese Grenze bei sieben Feldern sofort.
+ */
 function field<T extends z.ZodTypeAny>(value: T) {
-  return z.object({
-    value: value.nullable(),
-    confidence: z.number().min(0).max(100),
-    evidence: evidenceSchema.nullable(),
-  });
+  return z
+    .object({
+      value,
+      confidence: z.number().min(0).max(100),
+      evidence: evidenceSchema,
+    })
+    .nullable();
 }
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Datum als JJJJ-MM-TT');
@@ -139,5 +149,41 @@ export const analysisSchema = z.object({
   summary: z.string().max(1200),
 });
 
-export type AnalysisOutput = z.infer<typeof analysisSchema>;
+/** Was ueber die Leitung kommt: Felder duerfen ganz fehlen. */
+export type AnalysisWire = z.infer<typeof analysisSchema>;
+
 export type AnalysisField<T> = { value: T | null; confidence: number; evidence: Evidence | null };
+
+/**
+ * Was die Pipeline verarbeitet: jedes Feld vorhanden, notfalls leer.
+ *
+ * Die Auswertung soll sich nicht an jeder Stelle fragen muessen, ob ein Feld
+ * ueberhaupt da ist - ein fehlendes Feld und ein Feld ohne Wert bedeuten
+ * dasselbe.
+ */
+export type AnalysisOutput = Omit<AnalysisWire, keyof typeof FELDER> & {
+  [K in keyof typeof FELDER]: AnalysisField<string>;
+};
+
+const FELDER = {
+  title: true,
+  documentType: true,
+  sender: true,
+  recipient: true,
+  subject: true,
+  documentDate: true,
+  receivedDate: true,
+} as const;
+
+const LEER: AnalysisField<string> = { value: null, confidence: 0, evidence: null };
+
+/** Fehlende Felder auf die leere Form bringen. */
+export function normalizeAnalysis(wire: AnalysisWire): AnalysisOutput {
+  const normalized = { ...wire } as Record<string, unknown>;
+
+  for (const feld of Object.keys(FELDER)) {
+    normalized[feld] = (wire as Record<string, unknown>)[feld] ?? { ...LEER };
+  }
+
+  return normalized as AnalysisOutput;
+}

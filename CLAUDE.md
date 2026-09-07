@@ -156,6 +156,17 @@ Diese Regeln tragen die Glaubwürdigkeit der gesamten Anwendung.
   die Testhilfe. Ein Import von dort schließt den Kreis, und der Testlauf bleibt wortlos
   hängen — kein Fehler, keine Ausgabe, nur Stillstand. Deshalb liegen
   `createPrismaClient` und `ensureUserDefaults` in eigenen Modulen.
+- **Das Analyse-Schema darf höchstens 16 Felder mit Vereinigungstyp haben.**
+  Anthropic lehnt mehr mit `400 invalid_request_error` ab. Ein `nullable`
+  zählt bereits als Vereinigung, und zwei davon je Feld sind bei sieben
+  Feldern schon die halbe Grenze — deshalb ist in `field()` das *ganze* Feld
+  optional und nicht Wert und Beleg einzeln. Der Testanbieter reicht das
+  Schema nie an die API, die Grenze fällt also erst in Produktion auf;
+  abgesichert ist sie durch `src/lib/ai/analysis-schema.test.ts`.
+- **Was das Laufzeit-Abbild kopiert, muss die `.dockerignore` durchlassen.**
+  `scripts/` war vollständig ausgesperrt, obwohl das Dockerfile es kopiert
+  (`restore.sh` läuft im Container). Der Build brach mit `"/scripts": not
+  found` ab. Lokal fällt so etwas nie auf, weil hier kein Abbild gebaut wird.
 - **`notFound()` liefert auf geschützten Seiten den Status 200**, weil die Hülle eine
   Ladeansicht hat und Next deshalb sofort streamt. Der Inhalt ist trotzdem die
   Nicht-gefunden-Seite; geprüft wird die Eigenschaft, nicht der Status

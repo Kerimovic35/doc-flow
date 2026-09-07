@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { Prisma } from '@/generated/prisma/client';
-import { analysisSchema, type AnalysisOutput } from '@/lib/ai/analysis-schema';
+import {
+  analysisSchema,
+  normalizeAnalysis,
+  type AnalysisOutput,
+  type AnalysisWire,
+} from '@/lib/ai/analysis-schema';
 import { amountToCents } from '@/lib/parsing/amount';
 import { resolveDeadline, type DeadlineUnit } from '@/lib/parsing/relative-deadline';
 import { normalizeIdentifier } from '@/lib/text/normalize';
@@ -187,7 +192,7 @@ export async function runAnalyze(documentId: string, options: AnalyzeOptions = {
       today: new Date().toISOString().slice(0, 10),
     });
 
-    const result = await provider.extract<AnalysisOutput>({
+    const result = await provider.extract<AnalysisWire>({
       system,
       content,
       schema: analysisSchema,
@@ -199,7 +204,7 @@ export async function runAnalyze(documentId: string, options: AnalyzeOptions = {
       documentId,
       userId: document.userId,
       runId: run.id,
-      output: result.data,
+      output: normalizeAnalysis(result.data),
       pages,
       existingMeta: readFieldMeta(document.fieldMeta),
       persons: document.user.persons.map((person) => person.id),
